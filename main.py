@@ -65,15 +65,10 @@ def thickness_to_hyper_coords(
     x, y, img_height, img_width
 ) -> Union[tuple[int, int], None]:
     """
-    TODO: MODIFY TO SUIT YOUR NEEDS
     function you may fill with a mapping of:
         (u,v) coordinates in wafer space to (x,y) coordinates in pixel space
     """
-    # In my example case I just multiple by resolution coefficient
-    coordinates = (round(x * img_height), round(y * img_width))
-
-    # if coordinates
-    return coordinates  # or none if cannot find
+    return (x * (483 / 150) + 515, y * (483 / 150) + 518)
 
 
 def build_learning_ds(

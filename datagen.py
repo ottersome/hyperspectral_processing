@@ -112,8 +112,8 @@ if __name__ == "__main__":
     print("Creating ./data")
     os.makedirs(args.save_dir, exist_ok=True)
 
-    thickness_path = Path(args.save_dir) / "thickness.parquet"
-    hyperspec_path = Path(args.save_dir) / "hyperspec.parquet"
+    thickness_path = Path(args.save_dir) / "thickness.csv"
+    hyperspec_path = Path(args.save_dir) / "hyperspec.csv"
 
     # Create Datasets
     print("Creating datasets")
@@ -129,7 +129,7 @@ if __name__ == "__main__":
 
     print("Saving thickness data")
     columns_A = ["X", "Y", "Thickness"]
-    pd.DataFrame(sampled_thick_map, columns=columns_A).to_parquet(
+    pd.DataFrame(sampled_thick_map, columns=columns_A).to_csv(
         thickness_path, index=False
     )
 
@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     print("Creating HyperSpectral Data")
     columns_B = ["U", "V"] + [f"hyp{i}" for i in range(122)]
-    pd.DataFrame(hyper_idxd_and_squeezed, columns=columns_B).to_parquet(
+    pd.DataFrame(hyper_idxd_and_squeezed, columns=columns_B).to_csv(
         hyperspec_path, index=False
     )
 
