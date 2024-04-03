@@ -1,6 +1,7 @@
 import logging
 import os
 from argparse import ArgumentParser
+from collections import namedtuple
 from typing import Any, List, Tuple, Union
 
 import matplotlib.pyplot as plt
@@ -12,6 +13,8 @@ from tqdm import tqdm
 from model import Model
 
 set_detect_anomaly(True)
+
+DataSet = List[List[Any]]
 
 
 def create_logger():
@@ -99,6 +102,23 @@ def build_learning_ds(
     return ds
 
 
+def infill_missing_point(row: List[Any]):
+    # TODO: Fill in with the right typ of content
+    pass
+
+def process_missing_points(ds: DataSet) -> DataSet:
+    # This might require something like compressed sensing, matrix reduction,etc
+    for row_idx, row in df.iterrows():
+        # If we have a missing point, we need to fill it in
+        if row.isnull().any():
+            pass
+        else:
+            infill_missing_point(row)
+    return ds # CHECK: Ensure this is correct
+
+
+def find_orientating_feature(template)
+
 if __name__ == "__main__":
     args = arguments()
     # Set random seeds
@@ -127,6 +147,11 @@ if __name__ == "__main__":
     # Create Train-Validation split
     ds_train = dataset[: int(len(dataset) * args.train_val_split[0])]
     ds_val = dataset[int(len(dataset) * args.train_val_split[0]) :]
+
+    #TODO: Add support for missing points using compressed sensing
+    ds_train = process_missing_points(ds_train)
+    ds_val = process_missing_points(ds_val)
+
 
     # Train Loop
     num_batches = len(ds_train) // args.batch_size  # Throwing remainder
@@ -166,6 +191,7 @@ if __name__ == "__main__":
             val_loss = criterium(y_pred.squeeze(), y)
             val_losses.append(val_loss.item())
         model.train()
+
 
     # Show Train-Test Performance
     # logger.info(f"Train Losses: {train_losses}")
