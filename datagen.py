@@ -36,6 +36,8 @@ def getargs():
     ap.add_argument("--num_samples", default=885, type=int)
     ap.add_argument("--num_bands", default=122, type=int)
     ap.add_argument("--should_noise", default=True, type=bool)
+    ap.add_argument("--data_points", default=5, type=int)
+    ap.add_argument("--show_image", action="store_true")
 
     # Devil's Details
     ap.add_argument("--aoi_offset", default=0.1, type=float)
@@ -84,6 +86,7 @@ def ds_creation(
     aoi_offset: Point,
     blemish_angle: float,
     feature_img: np.ndarray,
+    show_image: bool = False,
     blemish_distance_p_aoiradius: float = 0.45,
     aoi_radius_p_res: float = 0.84,
     blemish_radius_paoiradius: float = 0.10,
@@ -212,8 +215,11 @@ def ds_creation(
     avg_hyper_image = np.mean(hyper_img, axis=-1)
 
     # Show Image
-    cv2.imshow("HyperImage", hyper_img[:, :, 0])
-    cv2.waitKey(0)
+    if show_image:
+        cv2.imshow("HyperImage", hyper_img[:, :, 0])
+        cv2.waitKey(0)
+        # Close window
+        cv2.destroyAllWindows()
 
     return thick_map, hyper_img
 
@@ -253,52 +259,58 @@ if __name__ == "__main__":
     print("Creating ./data")
     os.makedirs(args.save_dir, exist_ok=True)
 
-    date_time = pd.Timestamp.now().strftime("%Y-%m-%d_%H-%M-%S")
-    thickness_path = Path(args.save_dir) / f"target_{date_time}.parquet"
-    hyperspec_path = Path(args.save_dir) / f"features_{date_time}.parquet"
+    bar = tqdm(total=args.data_points, desc="Creating datapoints", leave=False)
 
-    # Load Feature image(Single channel)
-    feat_img: np.ndarray = cv2.imread(args.feature_img_path, cv2.IMREAD_GRAYSCALE)
+    for i in range(args.data_points):
+        date_time = pd.Timestamp.now().strftime("%Y-%m-%d_%H-%M-%S")
+        thickness_path = Path(args.save_dir) / f"target_{date_time}.parquet"
+        hyperspec_path = Path(args.save_dir) / f"features_{date_time}.parquet"
 
-    # Create Datasets
-    print("Creating datasets")
-    thick_map, hyper_img = ds_creation(
-        args.resolution,
-        args.num_bands,
-        args.should_noise,
-        args.aoi_offset,
-        args.blemish_angle,
-        feat_img,
-        args.blemish_distance_p_aoiradius,
-        args.aoi_radius_p_res,
-        args.blemish_radius,
-    )
-    # SubSample Dataset
-    print("Subsampling Data")
-    sampled_thick_map = sample_thick_map(thick_map)
-    # sampled_thick_map[:, 0] /= args.resolution[0]
-    # sampled_thick_map[:, 1] /= args.resolution[1]
+        # Load Feature image(Single channel)
+        feat_img: np.ndarray = cv2.imread(args.feature_img_path, cv2.IMREAD_GRAYSCALE)
 
-    print("Saving thickness data")
-    columns_A = ["X", "Y", "Thickness"]
-    pd.DataFrame(sampled_thick_map, columns=columns_A).to_parquet(
-        thickness_path, index=False
-    )
+        # Create Datasets
+        bar.set_description("Creating datasets")
+        thick_map, hyper_img = ds_creation(
+            args.resolution,
+            args.num_bands,
+            args.should_noise,
+            args.aoi_offset,
+            args.blemish_angle,
+            feat_img,
+            args.show_image,
+            args.blemish_distance_p_aoiradius,
+            args.aoi_radius_p_res,
+            args.blemish_radius,
+        )
+        # SubSample Dataset
+        bar.set_description("Subsampling Data")
+        sampled_thick_map = sample_thick_map(thick_map)
+        # sampled_thick_map[:, 0] /= args.resolution[0]
+        # sampled_thick_map[:, 1] /= args.resolution[1]
 
-    # Process data as final presentation format
-    i, j = np.indices((1280, 1024))
-    ix, jx = (np.expand_dims(i, -1), np.expand_dims(j, -1))
-    print(
-        f"Hyper image shape {hyper_img.shape} whereas ix, jx are {ix.shape}, {jx.shape}"
-    )
-    hyper_idxd_and_squeezed = np.concatenate((ix, jx, hyper_img), axis=-1).reshape(
-        -1, 2 + args.num_bands
-    )
+        bar.set_description("Saving thickness data")
+        columns_A = ["X", "Y", "Thickness"]
+        pd.DataFrame(sampled_thick_map, columns=columns_A).to_parquet(
+            thickness_path, index=False
+        )
 
-    print("Creating HyperSpectral Data")
-    columns_B = ["U", "V"] + [f"hyp{i}" for i in range(122)]
-    pd.DataFrame(hyper_idxd_and_squeezed, columns=columns_B).to_parquet(
-        hyperspec_path, index=False
-    )
+        # Process data as final presentation format
+        i, j = np.indices((1280, 1024))
+        ix, jx = (np.expand_dims(i, -1), np.expand_dims(j, -1))
+        bar.set_description(
+            f"Hyper image shape {hyper_img.shape} whereas ix, jx are {ix.shape}, {jx.shape}"
+        )
+        hyper_idxd_and_squeezed = np.concatenate((ix, jx, hyper_img), axis=-1).reshape(
+            -1, 2 + args.num_bands
+        )
+
+        bar.set_description("Creating HyperSpectral Data")
+        columns_B = ["U", "V"] + [f"hyp{i}" for i in range(args.num_bands)]
+        pd.DataFrame(hyper_idxd_and_squeezed, columns=columns_B).to_parquet(
+            hyperspec_path, index=False
+        )
+
+        bar.update(1)
 
     print("Done")
