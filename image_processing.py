@@ -1,3 +1,6 @@
+"""
+This is a file used for experimetns. Not really used for much but for education
+"""
 import argparse
 import tkinter as tk
 from collections import namedtuple
@@ -6,7 +9,8 @@ from typing import Tuple
 import cv2
 import numpy as np
 
-Point = namedtuple("Point", ["x", "y"])
+from hyptraining.utils.utils import Point
+
 # Extend Point to take in an ndarray for construction
 
 ORIENTATIONS = ["top", "left", "bottom", "right"]
@@ -128,6 +132,18 @@ def get_final_image(
     circle_radius: int,
     preferred_angle: float,
 ) -> np.ndarray:
+    """
+    Parameters
+    ----------
+        - img (np.ndarray): image containing src information,
+        - feature_location (Point): where feature of interest is location
+        - circle_location (Point): circle locations
+        - circle_radius (int): radius of circle
+        - preferred_angle (float): angle at which we want our feature
+    Returns
+    -------
+        - final_image: Already cropped image
+    """
     # First, crop the image
     cropped = img[
         circle_location.y - circle_radius : circle_location.y + circle_radius,
@@ -173,7 +189,12 @@ def get_final_image(
     return final_image
 
 
-def main(args: argparse.Namespace):
+"""
+As an example pipline:
+"""
+
+
+def example(args: argparse.Namespace):
     # Load the image
     img: np.ndarray = cv2.imread(args.img)
     # Get size along 3 dimensions
@@ -199,4 +220,4 @@ def main(args: argparse.Namespace):
 
 if __name__ == "__main__":
     args = arguments()
-    main(args)
+    example(args)
