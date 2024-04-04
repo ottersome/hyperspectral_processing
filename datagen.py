@@ -198,13 +198,13 @@ def ds_creation(
     blemish_distance = blemish_distance_p_aoiradius * aoi_radius
     blemish_point = Point(
         aoi_offset.x
-        + blemish_distance * np.cos(blemish_angle - random_feature_orientation),
+        + blemish_distance * np.cos(blemish_angle + random_feature_orientation),
         aoi_offset.y
-        - blemish_distance * np.sin(blemish_angle - random_feature_orientation),
+        - blemish_distance * np.sin(blemish_angle + random_feature_orientation),
     )
     # Add black circle spot at blemish_points
     i, j = np.indices((res[0], res[1]))
-    blemish_circle_idx = (i - blemish_point.x) ** 2 + (j - blemish_point.y) ** 2 < (
+    blemish_circle_idx = (i - blemish_point.y) ** 2 + (j - blemish_point.x) ** 2 < (
         blemish_radius_paoiradius * aoi_radius
     ) ** 2
     hyper_img[blemish_circle_idx] = 0
