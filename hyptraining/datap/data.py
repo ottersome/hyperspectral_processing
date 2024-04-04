@@ -7,7 +7,7 @@ import pandas as pd
 from ..utils.utils import create_logger
 from .processing import get_standard_source
 
-file_path = os.path.abspath(__file__)
+file_path = os.path.basename(__file__)
 DATA_LOGGER = create_logger(file_path)
 
 
@@ -121,7 +121,7 @@ def _read_source(file_path: str) -> pd.DataFrame:
     if file_path.endswith(".csv"):
         return pd.read_csv(file_path)
     elif file_path.endswith(".parquet"):
-        pass  # LIKELY to not use
+        return pd.read_parquet(file_path)
     elif file_path.endswith(".ENVI"):
         pass
         # TODO: need to understand more how envi files work and their format
@@ -136,7 +136,7 @@ def _read_target(file_path: str) -> pd.DataFrame:
     if file_path.endswith(".csv"):
         return pd.read_csv(file_path)
     elif file_path.endswith(".parquet"):
-        pass  # LIKELY to not use
+        return pd.read_parquet(file_path)
     elif file_path.endswith(".ENVI"):
         pass
         # TODO: need to understand more how envi files work and their format

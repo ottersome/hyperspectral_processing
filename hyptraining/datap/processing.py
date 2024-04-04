@@ -127,7 +127,7 @@ def df_to_img(df: pd.DataFrame, width: int, height: int, channels: int) -> np.nd
     """
     Columns are channels, rows are pixels in row-major
     """
-    return df.to_numpy().reshape((width, height, channels))
+    return df.to_numpy().reshape((height, width, channels))
 
 
 def get_cropped_image(

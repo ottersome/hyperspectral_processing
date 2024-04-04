@@ -32,18 +32,18 @@ affr = affr**2
 def getargs():
     ap = ArgumentParser()
     ap.add_argument("--save_dir", default="./data/raw/")
-    ap.add_argument("--resolution", default=[1280, 1024])
-    ap.add_argument("--num_samples", default=885)
-    ap.add_argument("--num_bands", default=122)
+    ap.add_argument("--resolution", default=[1280, 1024], type=List)
+    ap.add_argument("--num_samples", default=885, type=int)
+    ap.add_argument("--num_bands", default=122, type=int)
     ap.add_argument("--should_noise", default=True, type=bool)
 
     # Devil's Details
-    ap.add_argument("--aoi_offset", default=0.1)
-    ap.add_argument("--blemish_angle", default=7 * pi / 10)
-    ap.add_argument("--blemish_distance_p_aoiradius", default=0.40)
-    ap.add_argument("--feature_img_path", default="./feature_right.png")
-    ap.add_argument("--aoi_radius_p_res", default=0.85)
-    ap.add_argument("--blemish_radius", default=0.1)
+    ap.add_argument("--aoi_offset", default=0.1, type=float)
+    ap.add_argument("--blemish_angle", default=7 * pi / 5, type=float)
+    ap.add_argument("--blemish_distance_p_aoiradius", default=0.50, type=float)
+    ap.add_argument("--feature_img_path", default="./feature_right.png", type=str)
+    ap.add_argument("--aoi_radius_p_res", default=0.85, type=float)
+    ap.add_argument("--blemish_radius", default=0.1, type=float)
 
     return ap.parse_args()
 
@@ -106,13 +106,14 @@ def ds_creation(
     # Thickness Map
     ########################################
     # Make it uniform for now
-    # thick_map = np.random.uniform(size=(res[0], res[1])) * 1e-3
+    thick_map = np.random.uniform(size=(res[0], res[1])) * 1e-3
+
     # 2D Gaussian centered at image's center
-    thick_map = np.zeros((res[0], res[1]))
-    i, j = np.indices((res[0], res[1]))
-    thick_map = np.exp(
-        -((i - res[0] // 2) ** 2 + (j - res[1] // 2) ** 2) / (2 * 100**2)
-    )
+    # thick_map = np.zeros((res[0], res[1]))
+    # i, j = np.indices((res[0], res[1]))
+    # thick_map = np.exp(
+    #     -((i - res[0] // 2) ** 2 + (j - res[1] // 2) ** 2) / (2 * 100**2)
+    # )
 
     # Offset is randomw ithin range
     aoi_offset_max = smalled_dim * aoi_radius_p_res // 2 + feature_img.shape[0] // 2
@@ -140,7 +141,6 @@ def ds_creation(
     hyper_img = np.empty(shape=(res[0], res[1], num_bands))
 
     # Generate Samples
-    wl_samples = np.linspace(bands_lims[0], bands_lims[-1], 15 * len(bands_lims))
     bar = tqdm(total=num_bands, desc="Creating power for band: ")
     # for i in range(len(bands_lims) - 1):
     for i in range(num_bands):  # TODO: change this back to 122
@@ -173,6 +173,7 @@ def ds_creation(
         + feature_img.shape[1] // 2,
         :,
     ]
+    # TODO: Clean this mess up
     multi = np.multiply(
         feature_insertion_img,
         np.stack([feature_img] * hyper_img.shape[2], axis=-1),
@@ -254,7 +255,7 @@ if __name__ == "__main__":
 
     date_time = pd.Timestamp.now().strftime("%Y-%m-%d_%H-%M-%S")
     thickness_path = Path(args.save_dir) / f"target_{date_time}.parquet"
-    hyperspec_path = Path(args.save_dir) / f"source_{date_time}.parquet"
+    hyperspec_path = Path(args.save_dir) / f"features_{date_time}.parquet"
 
     # Load Feature image(Single channel)
     feat_img: np.ndarray = cv2.imread(args.feature_img_path, cv2.IMREAD_GRAYSCALE)
