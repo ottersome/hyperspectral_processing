@@ -69,24 +69,30 @@ def chords_to_circle(img: np.ndarray) -> Tuple[Point, int]:
 
 
 # TODO: find a distinctive feature to base rotation from
-def find_distinctive_feature_coords(img: np.ndarray, feature: np.ndarray) -> Point:
+def find_distinctive_feature_coords(
+    img_gray: np.ndarray, feature_gray: np.ndarray
+) -> Point:
+    assert len(img_gray.shape) == 2, f"Input image must be 2d"
+    assert len(feature_gray.shape) == 2, "Input feature map must be 2D"
+    img_gray = img_gray.astype(np.float32)
+    feature_gray = feature_gray.astype(np.float32)
     # Find distinctive feature
     # For now we will use the center of the circle
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    feat_gray = cv2.cvtColor(feature, cv2.COLOR_BGR2GRAY)
+    # img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # feat_gray = cv2.cvtColor(feature, cv2.COLOR_BGR2GRAY)
     print(f"Image size is {img_gray.shape[0]} ,{img_gray.shape[1]}")
-    print(f"Feature size is {feature.shape[0]} ,{feature.shape[1]}")
-    feat_width, feat_height = feature.shape[0], feature.shape[1]
+    print(f"Feature size is {feature_gray.shape[0]} ,{feature_gray.shape[1]}")
+    feat_width, feat_height = feature_gray.shape[0], feature_gray.shape[1]
 
     cur_maxval = 0
     cur_loc = [-1, -1]
 
     for r in ORIENTATIONS_RAD:
-        score_matrix = cv2.matchTemplate(img_gray, feat_gray, 3)
+        score_matrix = cv2.matchTemplate(img_gray, feature_gray, 3)
         rotation = cv2.getRotationMatrix2D(
             (feat_width // 2, feat_height // 2), np.degrees(r), 1
         )
-        feat_gray = cv2.warpAffine(feat_gray, rotation, (feat_width, feat_height))
+        feature_gray = cv2.warpAffine(feature_gray, rotation, (feat_width, feat_height))
         _, max_val, _, topleft_loc = cv2.minMaxLoc(score_matrix)
         if max_val > cur_maxval:
             cur_maxval = max_val
@@ -99,24 +105,17 @@ def find_distinctive_feature_coords(img: np.ndarray, feature: np.ndarray) -> Poi
     return feat_center
 
 
-def prompt_for_surrounding_points(img: np.ndarray) -> List[Point]:
-    local_img = img.copy()
-    if local_img.shape[2] > 1:
-        logger.warn(
-            "Image passed for point selection has more than 3 channels. Averaging"
-        )
-        local_img = np.mean(local_img, axis=2)
+def prompt_for_surrounding_points() -> List[Point]:
+    """
+    WARNING: This will change the image you pass. Please send copy if necessary.
+    """
     clicks = []
 
     def on_mouse(event, x, y, flags, params):
         if event == cv2.EVENT_LBUTTONDOWN:
             clicks.append((x, y))
 
-    cv2.namedWindow("image")
-    # Set Size of window
-    cv2.resizeWindow("image", 300, 300)
     cv2.setMouseCallback("image", on_mouse)
-    cv2.imshow("image", local_img)
     # Quit only after three clicks
     while len(clicks) < 3:
         cv2.waitKey(1)
@@ -191,15 +190,16 @@ def get_cropped_image(
 
 def get_standard_source(
     src: pd.DataFrame,
-    template_img: np.ndarray,
+    template_loc: str,
     src_width: int,
     src_height: int,
     src_channels: int,
     feature_angle: float,  # Should be radians
 ) -> np.ndarray:
-    # Transorm DataFrame into Image
-
-    # Select 2: columns from dataset
+    # Template Image:
+    template_img = cv2.imread(template_loc, cv2.IMREAD_GRAYSCALE)
+    print(f"Template image size is {template_img.shape}")
+    # Select 2-N columns from dataset
     img_columns = src.iloc[:, 2:]
     img: np.ndarray = df_to_img(img_columns, src_width, src_height, src_channels)
 
@@ -209,7 +209,17 @@ def get_standard_source(
 
     while not satisfied:
         # Prompt for points of interest
-        points = prompt_for_surrounding_points(img)
+        gray_img = np.mean(img, axis=-1) if img.shape[2] > 1 else img  # READ ONLY
+        visual_rep = gray_img.copy()  # Visual changes happen here
+
+        # Show Image for changes
+        cv2.namedWindow("image")
+        cv2.resizeWindow("image", 300, 300)
+        cv2.imshow("image", visual_rep)
+
+        # Ask user to select within the imagek
+        print("Please select three points in circle to find radius and center...")
+        points = prompt_for_surrounding_points()
 
         # Find Area of Interest
         (
@@ -218,7 +228,19 @@ def get_standard_source(
         ) = find_circle(*points)
 
         # Find Feature of Interest
-        feature_of_interest = find_distinctive_feature_coords(img, template_img)
+        print(
+            f"Center of image found at {circle_of_interest_coords} with radius {circle_of_interest_radius}"
+        )
+        cv2.circle(
+            visual_rep,
+            circle_of_interest_coords,
+            circle_of_interest_radius,
+            (255, 0, 0),
+        )
+        cv2.imshow("image", visual_rep)
+        cv2.waitKey(1)
+
+        feature_of_interest = find_distinctive_feature_coords(gray_img, template_img)
 
         # TODO: check for radii that result outside of image
         # Cropping Coordinates
@@ -231,7 +253,7 @@ def get_standard_source(
             feature_angle,
         )
         # Show Image and ask user if it looks good
-        cv2.imshow("Cropped Image", cropped_image)
+        cv2.imshow("image", visual_rep)
         # Check for keys:
         k = cv2.waitKey(0)
         # if 'a', again, if 'q' leave,

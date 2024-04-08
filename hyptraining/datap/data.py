@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import List
 
 import numpy as np
@@ -42,9 +43,9 @@ def combine_srctarg_into_sample(
 
 
 def preprocess_data(
-    source_dir: str,
+    rawdata_dir: str,
     cached_dir: str,
-    template_img: np.ndarray,
+    template_loc: str,
     source_width: int,
     source_height: int,
     source_channels: int,
@@ -55,40 +56,41 @@ def preprocess_data(
     """
 
     # If source_dir exists
-    assert os.path.exists(source_dir) and os.path.isdir(
-        source_dir
-    ), "Source dir does not exists"
+    assert (
+        Path(rawdata_dir).exists() and Path(rawdata_dir).exists()
+    ), "Raw data dir does not exists"
 
-    # Replace the extensionw with npy (could be any in a range of extensions)
+    # Replace the extension with npy (could be any in a range of extensions)
     columns = ["X", "Y", "I", "J"] + [f"C{i}" for i in range(source_channels)]
 
     # Ensure it exists
-    os.makedirs(cached_dir, exist_ok=True)
+    Path(cached_dir).mkdir(parents=True, exist_ok=True)
 
     # Iterate through source_dir:
-    for file in os.listdir(source_dir):
-        # Check if the file is a csv
+    for file in os.listdir(rawdata_dir):
+        #  start with target file, find the coressopnding feature file.
         if "target" in file:
-            # Check if cached_dir does not have the equivalent
-            cache_name = os.path.basename(file).replace("target", "source")
-            cache_name = cache_name[: cache_name.find(".")]
+            # Check if its already been processed
             saveto_path = cached_dir[: cached_dir.find(".")] + ".npy"
+
             if os.path.exists(os.path.join(cached_dir, file)):
                 DATA_LOGGER.info(f"{file} is already cached in {saveto_path}")
                 continue
+
+            # If not already preprocessed:
             DATA_LOGGER.info(f"Found unprocessed file {file}. Loading into cache...")
 
-            target_rows = _read_target(os.path.join(source_dir, file))
+            # Read target data
+            target_rows = _read_target(os.path.join(rawdata_dir, file))
 
-            # Find Corresponding src file
-            source_name = file.replace("target", "features")
-
-            source_image = _read_source(os.path.join(source_dir, source_name))
+            # Find corresponding feature file
+            featurefile_name = file.replace("target", "features")
+            source_image = _read_source(os.path.join(rawdata_dir, featurefile_name))
 
             # Get the final image in the size that we want
             standard_source: np.ndarray = get_standard_source(
                 src=source_image,
-                template_img=template_img,
+                template_loc=template_loc,
                 src_width=source_width,
                 src_height=source_height,
                 src_channels=source_channels,

@@ -67,7 +67,9 @@ def arguments():
         help="How we want the feature to be oriented on all data points.",
     )
     ap.add_argument(
-        "--template_location", default=42, help="Location for detecting feature."
+        "--template_location",
+        default="./feature_right.png",
+        help="Template for detecting features",
     )
 
     # Parmeters for training
