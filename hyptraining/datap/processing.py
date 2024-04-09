@@ -105,7 +105,7 @@ def find_distinctive_feature_coords(
     return feat_center
 
 
-def prompt_for_surrounding_points() -> List[Point]:
+def prompt_for_surrounding_points(image_window_id: str) -> List[Point]:
     """
     WARNING: This will change the image you pass. Please send copy if necessary.
     """
@@ -115,7 +115,7 @@ def prompt_for_surrounding_points() -> List[Point]:
         if event == cv2.EVENT_LBUTTONDOWN:
             clicks.append((x, y))
 
-    cv2.setMouseCallback("image", on_mouse)
+    cv2.setMouseCallback(image_window_id, on_mouse)
     # Quit only after three clicks
     while len(clicks) < 3:
         cv2.waitKey(1)
@@ -129,7 +129,7 @@ def df_to_img(df: pd.DataFrame, width: int, height: int, channels: int) -> np.nd
     return df.to_numpy().reshape((height, width, channels))
 
 
-def get_cropped_image(
+def get_croppedRotated_img(
     img: np.ndarray,
     feature_location: Point,
     circle_location: Point,
@@ -158,8 +158,8 @@ def get_cropped_image(
     cropped_width = cropped.shape[1]
     # Shift the feature_location
     feature_local = Point(
-        feature_location.x - circle_location.x + cropped_width // 2,
-        feature_location.y - circle_location.y + cropped_height // 2,
+        feature_location.x - (circle_location.x - cropped_width // 2),
+        feature_location.y - (circle_location.y - cropped_height // 2),
     )
     # Ensure feature within radius
     assert (
@@ -168,10 +168,10 @@ def get_cropped_image(
     # Angle between args.direction and
     feat_from_center = Point(
         feature_local.x - cropped_width // 2,
-        feature_local.y - cropped_height // 2,
+        -(feature_local.y - cropped_height // 2),
     )
     print(f"Feature from center {feat_from_center}")
-    feature_angle = np.arctan2(-feat_from_center.y, feat_from_center.x)
+    feature_angle = np.arctan2(feat_from_center.y, feat_from_center.x)
     print(f"Feature angle is rad: {feature_angle} deg: {np.degrees(feature_angle)}")
     print(
         f"Preferred angle is rad: {preferred_angle} deg: {np.degrees(preferred_angle)}"
@@ -209,8 +209,12 @@ def get_standard_source(
 
     while not satisfied:
         # Prompt for points of interest
-        gray_img = np.mean(img, axis=-1) if img.shape[2] > 1 else img  # READ ONLY
-        visual_rep = gray_img.copy()  # Visual changes happen here
+        # gray_img = np.mean(img, axis=-1) if img.shape[2] > 1 else img  # READ ONLY
+        gray_img = img[:, :, 0].squeeze() if img.shape[2] > 1 else img  # READ ONLY
+        visual_rep = np.stack((gray_img,) * 3, axis=-1).astype(
+            np.float32
+        )  # Visual changes happen here
+        print(f"Show shape {visual_rep.shape}")
 
         # Show Image for changes
         cv2.namedWindow("image")
@@ -219,7 +223,7 @@ def get_standard_source(
 
         # Ask user to select within the imagek
         print("Please select three points in circle to find radius and center...")
-        points = prompt_for_surrounding_points()
+        points = prompt_for_surrounding_points("image")
 
         # Find Area of Interest
         (
@@ -231,47 +235,50 @@ def get_standard_source(
         print(
             f"Center of image found at {circle_of_interest_coords} with radius {circle_of_interest_radius}"
         )
+
         cv2.circle(
             visual_rep,
             circle_of_interest_coords,
             circle_of_interest_radius,
-            (255, 0, 0),
+            (0, 255, 0),
         )
-        cv2.imshow("image", visual_rep)
-        cv2.waitKey(1)
 
         feature_of_interest = find_distinctive_feature_coords(gray_img, template_img)
+        cv2.circle(visual_rep, feature_of_interest, 3, (0, 0, 255))
+        cv2.imshow("image", visual_rep)
+
+        cv2.waitKey(5000)
+        cv2.destroyWindow("image")
 
         # TODO: check for radii that result outside of image
         # Cropping Coordinates
 
-        cropped_image = get_cropped_image(
+        cropped_image = get_croppedRotated_img(
             img,
             feature_of_interest,
             circle_of_interest_coords,
             circle_of_interest_radius,
             feature_angle,
         )
-        # Show Image and ask user if it looks good
-        cv2.imshow("image", visual_rep)
-        # Check for keys:
-        k = cv2.waitKey(0)
-        # if 'a', again, if 'q' leave,
-        cv2.destroyAllWindows()
-        if k == ord("q"):
-            break
-        if k == ord("a"):
-            continue
+        cropped_vis = get_croppedRotated_img(
+            visual_rep,
+            feature_of_interest,
+            circle_of_interest_coords,
+            circle_of_interest_radius,
+            feature_angle,
+        )
+
+        # Show Image
+        cv2.imshow("image", cropped_vis)
+        cv2.waitKey(1)
 
         # Look for circles to remove
-        ignore_points = prompt_for_surrounding_points(cropped_image)
+        print("Please select area to remove")
+        ignore_points = prompt_for_surrounding_points("image")
         ignore_circle_coords, ignore_circle_radius = find_circle(*ignore_points)
-
-        # Show image but with ignore circle blacked out
-        cv2.circle(
-            cropped_image, ignore_circle_coords, ignore_circle_radius, (0, 0, 0), -1
-        )
-        cv2.imshow("Cropped Image", cropped_image)
+        cv2.circle(cropped_vis, ignore_circle_coords, ignore_circle_radius, (255, 0, 0))
+        cv2.imshow("image", cropped_vis)
+        cv2.waitKey(1)
 
         satisfied = input("Is the image satisfactory? (y/n): ") == "y"
         if not satisfied:
