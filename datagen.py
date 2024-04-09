@@ -41,7 +41,9 @@ def getargs():
     ap.add_argument("--resolution", default=[1024, 1280], type=List[int])  # type:ignore
     ap.add_argument("--num_samples", default=885, type=int)
     ap.add_argument("--num_bands", default=122, type=int)
-    ap.add_argument("--should_noise", default=True, type=bool)
+    ap.add_argument(
+        "--should_noise", default=False, type=bool
+    )  # Looks too noisy with the extra noise
     ap.add_argument("--data_points", default=5, type=int)
     ap.add_argument("--show_image", action="store_true")
 
@@ -225,9 +227,18 @@ def ds_creation(
         np.stack([feature_img] * hyper_img.shape[2], axis=-1),
     )
     amnt = np.sum(feature_img == 0)
-    multi[feature_img == 0] = np.stack(
-        [band_calculation(1, np.full((amnt,), 0), should_noise)] * hyper_img.shape[2],
-        -1,
+    low_thickness = (
+        np.clip(np.random.normal(0, scale=thickness_variance, size=amnt), 0, 1)
+        * (bmax - bmin)
+        + bmin
+    )
+    calculation = simple_band_calculation(1, low_thickness, should_noise)
+    multi[feature_img == 0] = (
+        np.stack(
+            [calculation] * hyper_img.shape[2],
+            -1,
+        )
+        + 0.1
     )
     hyper_img[
         feature_location.y
@@ -249,7 +260,7 @@ def ds_creation(
         - blemish_distance * np.sin(blemish_angle + random_feature_orientation),
     )
     # Add black circle spot at blemish_points
-    i, j = np.indices((resolution[0], resolution[1]))
+    i, j = np.indices((resolution.y, resolution.x))
     blemish_circle_idx = (i - blemish_point.y) ** 2 + (j - blemish_point.x) ** 2 < (
         blemish_radius_paoiradius * aoi_radius
     ) ** 2
@@ -260,10 +271,8 @@ def ds_creation(
     # Show Image
     if show_image:
         # Show where center of aoi is
-        cv2.circle(thick_map, (int(aoi_offset[0]), (int(aoi_offset[1]))), 5, (1, 0, 0))
-        thick_map = np.clip(thick_map, 0, 1)
         # Show Image
-        plt.imshow(thick_map)
+        plt.imshow(avg_hyper_image)
         plt.clim(0, 1)
         # Right side value legend
         plt.colorbar()
@@ -283,6 +292,37 @@ def band_calculation(idx: int, thick_map: np.ndarray, should_noise: bool):
 
     samples = np.linspace(band0, bandf, 15)
     twod_samples = np.expand_dims(samples, axis=[0, 1])
+    phase_delta = np.expand_dims(2 * np.pi * n_sil * thick_map, axis=-1) / twod_samples
+
+    interference_term = 1 + np.cos(phase_delta)
+    reflectances = affr * interference_term
+    reflectance = np.mean(reflectances, axis=-1)
+
+    # Normalize reflectace
+    reflectance = (reflectance - np.min(reflectance)) / (
+        np.max(reflectance) - np.min(reflectance)
+    )
+    # Noise
+    noise = np.ones_like(phase_delta)
+    if should_noise:
+        variance = np.var(reflectances, axis=-1)
+        noise = np.random.normal(0, variance * 10, size=reflectances.shape[:-1])
+        reflectance += noise
+
+    return reflectance
+
+
+def simple_band_calculation(idx: int, thick_map: np.ndarray, should_noise: bool):
+    """
+    Will calculate the reflectance of a single band by sampling 15 inner points and averaging
+    their power.
+    Adding noise to data may be toggled.
+    """
+    band0 = bands_lims[idx]
+    bandf = bands_lims[idx + 1]
+
+    samples = np.linspace(band0, bandf, 15)
+    twod_samples = np.expand_dims(samples, axis=0)
     phase_delta = np.expand_dims(2 * np.pi * n_sil * thick_map, axis=-1) / twod_samples
 
     interference_term = 1 + np.cos(phase_delta)
@@ -350,7 +390,7 @@ if __name__ == "__main__":
         )
 
         # Process data as final presentation format
-        i, j = np.indices((1280, 1024))
+        i, j = np.indices((args.resolution[0], args.resolution[1]))
         ix, jx = (np.expand_dims(i, -1), np.expand_dims(j, -1))
         bar.set_description(
             f"Hyper image shape {hyper_img.shape} whereas ix, jx are {ix.shape}, {jx.shape}"

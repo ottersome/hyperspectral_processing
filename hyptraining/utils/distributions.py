@@ -35,7 +35,7 @@ def sample_distribution_per_pixel(
     # mean = 1 + distance / 10
     b = (1 / dropoff_distance) * np.log((1 - distance_to_1) / distance_to_1)
 
-    # Should give us a nice dropopp
+    # Should give us a nice dropoff
     difference = 1 - 1 / (
         1
         + np.exp(
