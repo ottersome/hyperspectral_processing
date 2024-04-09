@@ -48,9 +48,9 @@ def sample_distribution_per_pixel(
 
     # Use something like Relu to have a cuttoff at radiu
 
-    # sample = np.random.normal(loc=mean, scale=0.5)
-    samples = np.random.normal(loc=mean, scale=scale, size=1)
-    return samples.squeeze().tolist()
+    sample = np.random.normal(loc=mean, scale=scale, size=1).item()
+    sample_clipped = np.clip(sample, 0, 1)
+    return sample_clipped
 
 
 def student_t_show(mean: np.ndarray, cov: np.ndarray):

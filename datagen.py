@@ -52,6 +52,12 @@ def getargs():
     ap.add_argument("--feature_img_path", default="./feature_right.png", type=str)
     ap.add_argument("--aoi_radius_p_res", default=0.85, type=float)
     ap.add_argument("--blemish_radius", default=0.1, type=float)
+    ap.add_argument(
+        "--thickness_variance",
+        default=0.04,
+        type=float,
+        help="Models how much the thickness changes around mean.",
+    )
 
     return ap.parse_args()
 
@@ -91,15 +97,9 @@ def _generate_thickness(
     aoi_offset: Point,
     aoi_radius: float,
     offset: float = 0.5,
-    normal_scale=0.08,
+    normal_scale=0.04,
 ) -> np.ndarray:
     width, height = (width, height)
-
-    # Check that circle is within height x width
-    if aoi_offset.x - aoi_radius > 0 and aoi_offset.y - aoi_radius > 0:
-        print("WARNIG: Circle out of radius")
-
-    print(f"Drawing circle at {aoi_offset}")
 
     img = np.zeros((height, width))
     for i in tqdm(range(height)):
@@ -114,22 +114,10 @@ def _generate_thickness(
             )
             img[i, j] = s0
 
-    # Show where center of aoi is
-    cv2.circle(img, (int(aoi_offset[0]), (int(aoi_offset[1]))), 5, (1, 0, 0))
-
-    img = np.clip(img, 0, 1)
-    # Show Image
-    plt.imshow(img)
-    plt.clim(0, 1)
-    # Right side value legend
-    plt.colorbar()
-    plt.show()
-
-    exit()
-
     return img
 
 
+# TODO: Break this function apart, arguments are exploding
 def ds_creation(
     resolution: Point,
     num_bands: int,
@@ -138,6 +126,7 @@ def ds_creation(
     blemish_angle: float,
     feature_img: np.ndarray,
     show_image: bool = False,
+    thickness_variance: float = 0.04,
     blemish_distance_p_aoiradius: float = 0.45,
     aoi_radius_p_res: float = 0.84,
     blemish_radius_paoiradius: float = 0.10,
@@ -156,27 +145,19 @@ def ds_creation(
     """
     smalled_dim_val = min(resolution)
     smalled_dim_idx = resolution.index(smalled_dim_val)
-    print(f"Using aoi_radius_p_res {aoi_radius_p_res}")
     aoi_radius = (
         (smalled_dim_val) // 2 - feature_img.shape[smalled_dim_idx] // 2
     ) * aoi_radius_p_res
-    print(f"Giving us a aoi_radius : {aoi_radius}")
     ########################################
     # Thickness Map
     ########################################
 
     # Offset is randomw ithin range
     aoi_offset_max = aoi_radius + feature_img.shape[smalled_dim_idx] // 2
-    print(f"aoi_offset_max {aoi_offset_max}")
     aoi_offset = Point(
         np.random.uniform(aoi_offset_max, resolution.x - aoi_offset_max),
         np.random.uniform(aoi_offset_max, resolution.y - aoi_offset_max),
     )
-    print(f"LeftMin {aoi_offset_max} - RightMax {resolution.x - aoi_offset_max}")
-    print(f"TopMin {aoi_offset_max} - Bottommax {resolution.y - aoi_offset_max}")
-    print(f"Aoi offset {aoi_offset}")
-
-    thick_map = _generate_thickness(resolution.x, resolution.y, aoi_offset, aoi_radius)
 
     # Assert circle within image
     assert (
@@ -187,20 +168,23 @@ def ds_creation(
         and aoi_offset.y + aoi_radius < resolution.y
     ), "Circle out of bounds"
 
-    # Only keep a circle of uniform thickness, the rest gets blacked out
-    i, j = np.indices((resolution.y, resolution.x))
-    circle = (i - aoi_offset.y) ** 2 + (j - aoi_offset.x) ** 2 < aoi_radius**2
-    thick_map[~circle] = 0
+    thick_map = _generate_thickness(
+        resolution.x,
+        resolution.y,
+        aoi_offset,
+        aoi_radius,
+        normal_scale=thickness_variance,
+    )
 
-    # Show thick boi with pytplot:
-    plt.imshow(thick_map)
-    plt.colorbar()
-    plt.show()
+    # We want to scale thickness to bands magnitudes
+    bmin, bmax = (bands_lims[0], bands_lims[-1])
+    thick_map = thick_map * (bmax - bmin) + bmin
+    # thick_map = thick_map * (bmin - 1e-9) + 1e-9
 
     ########################################
     # HyperImage
     ########################################
-    hyper_img = np.empty(shape=(resolution[0], resolution[1], num_bands))
+    hyper_img = np.empty(shape=(resolution.y, resolution.x, num_bands))
 
     # Generate Samples
     bar = tqdm(total=num_bands, desc="Creating power for band: ")
@@ -275,10 +259,15 @@ def ds_creation(
 
     # Show Image
     if show_image:
-        cv2.imshow("HyperImage", hyper_img[:, :, 0])
-        cv2.waitKey(0)
-        # Close window
-        cv2.destroyAllWindows()
+        # Show where center of aoi is
+        cv2.circle(thick_map, (int(aoi_offset[0]), (int(aoi_offset[1]))), 5, (1, 0, 0))
+        thick_map = np.clip(thick_map, 0, 1)
+        # Show Image
+        plt.imshow(thick_map)
+        plt.clim(0, 1)
+        # Right side value legend
+        plt.colorbar()
+        plt.show()
 
     return thick_map, hyper_img
 
@@ -294,14 +283,16 @@ def band_calculation(idx: int, thick_map: np.ndarray, should_noise: bool):
 
     samples = np.linspace(band0, bandf, 15)
     twod_samples = np.expand_dims(samples, axis=[0, 1])
-    print(f"Sample slook like {twod_samples[:3,:3,:2]}")
     phase_delta = np.expand_dims(2 * np.pi * n_sil * thick_map, axis=-1) / twod_samples
 
     interference_term = 1 + np.cos(phase_delta)
     reflectances = affr * interference_term
-
     reflectance = np.mean(reflectances, axis=-1)
 
+    # Normalize reflectace
+    reflectance = (reflectance - np.min(reflectance)) / (
+        np.max(reflectance) - np.min(reflectance)
+    )
     # Noise
     noise = np.ones_like(phase_delta)
     if should_noise:
@@ -341,6 +332,7 @@ if __name__ == "__main__":
             args.blemish_angle,
             feat_img,
             args.show_image,
+            args.thickness_variance,
             args.blemish_distance_p_aoiradius,
             args.aoi_radius_p_res,
             args.blemish_radius,
