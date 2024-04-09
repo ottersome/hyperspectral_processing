@@ -12,10 +12,16 @@ from pathlib import Path
 from typing import List, Tuple
 
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from hyptraining.utils.distributions import (
+    sample_distribution_per_pixel,
+    sample_studentt,
+    student_t_show,
+)
 from hyptraining.utils.utils import Point
 
 # Assume refractive indices for silicon and air
@@ -32,7 +38,7 @@ affr = affr**2
 def getargs():
     ap = ArgumentParser()
     ap.add_argument("--save_dir", default="./data/raw/")
-    ap.add_argument("--resolution", default=[1280, 1024], type=List)
+    ap.add_argument("--resolution", default=[1024, 1280], type=List[int])  # type:ignore
     ap.add_argument("--num_samples", default=885, type=int)
     ap.add_argument("--num_bands", default=122, type=int)
     ap.add_argument("--should_noise", default=True, type=bool)
@@ -79,8 +85,53 @@ def rotate_image(img: np.ndarray, radians: float):
     return cv2.warpAffine(img, rot_mat, img.shape[1::-1], flags=cv2.INTER_LINEAR)
 
 
+def _generate_thickness(
+    width: int,
+    height: int,
+    aoi_offset: Point,
+    aoi_radius: float,
+    offset: float = 0.5,
+    normal_scale=0.08,
+) -> np.ndarray:
+    width, height = (width, height)
+
+    # Check that circle is within height x width
+    if aoi_offset.x - aoi_radius > 0 and aoi_offset.y - aoi_radius > 0:
+        print("WARNIG: Circle out of radius")
+
+    print(f"Drawing circle at {aoi_offset}")
+
+    img = np.zeros((height, width))
+    for i in tqdm(range(height)):
+        for j in range(width):
+            s0 = sample_distribution_per_pixel(
+                i,
+                j,
+                aoi_offset,
+                aoi_radius,
+                normal_scale,
+                offset,
+            )
+            img[i, j] = s0
+
+    # Show where center of aoi is
+    cv2.circle(img, (int(aoi_offset[0]), (int(aoi_offset[1]))), 5, (1, 0, 0))
+
+    img = np.clip(img, 0, 1)
+    # Show Image
+    plt.imshow(img)
+    plt.clim(0, 1)
+    # Right side value legend
+    plt.colorbar()
+    plt.show()
+
+    exit()
+
+    return img
+
+
 def ds_creation(
-    res: List[int],
+    resolution: Point,
     num_bands: int,
     should_noise: bool,
     aoi_offset: Point,
@@ -103,45 +154,53 @@ def ds_creation(
     Returns
     ~~~~~~~~~
     """
-    smalled_dim = min(res)
-    aoi_radius = (smalled_dim // 2) * aoi_radius_p_res
+    smalled_dim_val = min(resolution)
+    smalled_dim_idx = resolution.index(smalled_dim_val)
+    print(f"Using aoi_radius_p_res {aoi_radius_p_res}")
+    aoi_radius = (
+        (smalled_dim_val) // 2 - feature_img.shape[smalled_dim_idx] // 2
+    ) * aoi_radius_p_res
+    print(f"Giving us a aoi_radius : {aoi_radius}")
     ########################################
     # Thickness Map
     ########################################
-    # Make it uniform for now
-    thick_map = np.random.uniform(size=(res[0], res[1])) * 1e-3
-
-    # 2D Gaussian centered at image's center
-    # thick_map = np.zeros((res[0], res[1]))
-    # i, j = np.indices((res[0], res[1]))
-    # thick_map = np.exp(
-    #     -((i - res[0] // 2) ** 2 + (j - res[1] // 2) ** 2) / (2 * 100**2)
-    # )
 
     # Offset is randomw ithin range
-    aoi_offset_max = smalled_dim * aoi_radius_p_res // 2 + feature_img.shape[0] // 2
+    aoi_offset_max = aoi_radius + feature_img.shape[smalled_dim_idx] // 2
+    print(f"aoi_offset_max {aoi_offset_max}")
     aoi_offset = Point(
-        np.random.uniform(aoi_offset_max, res[1] - aoi_offset_max),
-        np.random.uniform(aoi_offset_max, res[0] - aoi_offset_max),
+        np.random.uniform(aoi_offset_max, resolution.x - aoi_offset_max),
+        np.random.uniform(aoi_offset_max, resolution.y - aoi_offset_max),
     )
+    print(f"LeftMin {aoi_offset_max} - RightMax {resolution.x - aoi_offset_max}")
+    print(f"TopMin {aoi_offset_max} - Bottommax {resolution.y - aoi_offset_max}")
+    print(f"Aoi offset {aoi_offset}")
+
+    thick_map = _generate_thickness(resolution.x, resolution.y, aoi_offset, aoi_radius)
 
     # Assert circle within image
     assert (
         aoi_offset.x - aoi_radius > 0 and aoi_offset.y - aoi_radius > 0
     ), "Circle out of bounds"
     assert (
-        aoi_offset.x + aoi_radius < res[1] and aoi_offset.y + aoi_radius < res[0]
+        aoi_offset.x + aoi_radius < resolution.x
+        and aoi_offset.y + aoi_radius < resolution.y
     ), "Circle out of bounds"
 
     # Only keep a circle of uniform thickness, the rest gets blacked out
-    i, j = np.indices((res[0], res[1]))
+    i, j = np.indices((resolution.y, resolution.x))
     circle = (i - aoi_offset.y) ** 2 + (j - aoi_offset.x) ** 2 < aoi_radius**2
     thick_map[~circle] = 0
+
+    # Show thick boi with pytplot:
+    plt.imshow(thick_map)
+    plt.colorbar()
+    plt.show()
 
     ########################################
     # HyperImage
     ########################################
-    hyper_img = np.empty(shape=(res[0], res[1], num_bands))
+    hyper_img = np.empty(shape=(resolution[0], resolution[1], num_bands))
 
     # Generate Samples
     bar = tqdm(total=num_bands, desc="Creating power for band: ")
@@ -206,7 +265,7 @@ def ds_creation(
         - blemish_distance * np.sin(blemish_angle + random_feature_orientation),
     )
     # Add black circle spot at blemish_points
-    i, j = np.indices((res[0], res[1]))
+    i, j = np.indices((resolution[0], resolution[1]))
     blemish_circle_idx = (i - blemish_point.y) ** 2 + (j - blemish_point.x) ** 2 < (
         blemish_radius_paoiradius * aoi_radius
     ) ** 2
@@ -234,9 +293,9 @@ def band_calculation(idx: int, thick_map: np.ndarray, should_noise: bool):
     bandf = bands_lims[idx + 1]
 
     samples = np.linspace(band0, bandf, 15)
-    phase_delta = np.expand_dims(
-        2 * np.pi * n_sil * thick_map, axis=-1
-    ) / np.expand_dims(samples, axis=[0, 1])
+    twod_samples = np.expand_dims(samples, axis=[0, 1])
+    print(f"Sample slook like {twod_samples[:3,:3,:2]}")
+    phase_delta = np.expand_dims(2 * np.pi * n_sil * thick_map, axis=-1) / twod_samples
 
     interference_term = 1 + np.cos(phase_delta)
     reflectances = affr * interference_term
@@ -256,6 +315,9 @@ def band_calculation(idx: int, thick_map: np.ndarray, should_noise: bool):
 if __name__ == "__main__":
     args = getargs()
 
+    meep = [2.5, 2.5]
+    mean = np.array(meep)  # The location vector (mean)
+
     print("Creating ./data")
     os.makedirs(args.save_dir, exist_ok=True)
 
@@ -272,7 +334,7 @@ if __name__ == "__main__":
         # Create Datasets
         bar.set_description("Creating datasets")
         thick_map, hyper_img = ds_creation(
-            args.resolution,
+            Point(args.resolution[1], args.resolution[0]),
             args.num_bands,
             args.should_noise,
             args.aoi_offset,
@@ -313,4 +375,4 @@ if __name__ == "__main__":
 
         bar.update(1)
 
-    print("Done")
+    print("Done"), args.resolution[1]
