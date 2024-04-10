@@ -5,19 +5,19 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from ..utils.utils import create_logger
+from ..utils.utils import Point, create_logger
 from .processing import get_standard_source
 
 file_path = os.path.basename(__file__)
 DATA_LOGGER = create_logger(file_path)
 
 
-def thickness_to_hyper_coords(x, y, img_height, img_width) -> tuple[int, int]:
+def thickness_to_hyper_coords(x, y, img_height, img_width) -> Point:
     """
     function you may fill with a mapping of:
         (u,v) coordinates in wafer space to (x,y) coordinates in pixel space
     """
-    return (x * (483 / 150) + 515, y * (483 / 150) + 518)
+    return Point(int(x * (483 / 150) + 515), int(y * (483 / 150) + 518))
 
 
 def combine_srctarg_into_sample(
@@ -30,7 +30,9 @@ def combine_srctarg_into_sample(
     for _, row in target.iterrows():
         x, y = row[["X", "Y"]]
         t = row["Thickness"]
-        i, j = thickness_to_hyper_coords(x, y, src_img.shape[1], src_img.shape[0])
+        i, j = thickness_to_hyper_coords(x, y, src_img.shape[0], src_img.shape[1])
+
+        # Source
 
         ij_features = src_img[i, j, :]
 
@@ -61,7 +63,9 @@ def preprocess_data(
     ), "Raw data dir does not exists"
 
     # Replace the extension with npy (could be any in a range of extensions)
-    columns = ["X", "Y", "I", "J"] + [f"C{i}" for i in range(source_channels)]
+    columns = ["X", "Y", "I", "J", "Thickness"] + [
+        f"C{i}" for i in range(source_channels)
+    ]
 
     # Ensure it exists
     Path(cached_dir).mkdir(parents=True, exist_ok=True)
@@ -71,9 +75,11 @@ def preprocess_data(
         #  start with target file, find the coressopnding feature file.
         if "target" in file:
             # Check if its already been processed
-            saveto_path = cached_dir[: cached_dir.find(".")] + ".npy"
+            print(f"Cached dir is {cached_dir}")
+            wrong_path = str(Path(cached_dir) / file)
+            saveto_path = wrong_path[: wrong_path.find(".")] + ".parquet"
 
-            if os.path.exists(os.path.join(cached_dir, file)):
+            if os.path.exists(saveto_path):
                 DATA_LOGGER.info(f"{file} is already cached in {saveto_path}")
                 continue
 
@@ -98,9 +104,13 @@ def preprocess_data(
             )
 
             # Form the rows from the target
+            print(f"Standard source shape {standard_source.shape}")
+            print(f"Targe_rowsshape {target_rows.shape}")
             final_rows = combine_srctarg_into_sample(standard_source, target_rows)
 
-            pd.DataFrame(final_rows).to_parquet(saveto_path, columns=columns)
+            pd.DataFrame(final_rows, columns=columns).to_parquet(
+                saveto_path, index=False
+            )
 
             # Save to final_rows to some file
             DATA_LOGGER.info(f"`{file}` added to cache  as `{saveto_path}`")

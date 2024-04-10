@@ -58,9 +58,11 @@ def arguments():
         help="Where to store post-processed data.",
     )
 
-    ap.add_argument("--image_channels", default=122, help="Size of model's input")
-    ap.add_argument("--image_height", default=1280, help="Hyperspectral image height.")
-    ap.add_argument("--image_width", default=1024, help="Hyperspectral image width")
+    ap.add_argument(
+        "--image_channels", default=122, type=int, help="Size of model's input"
+    )
+    ap.add_argument("--image_height", default=1024, help="Hyperspectral image height.")
+    ap.add_argument("--image_width", default=1280, help="Hyperspectral image width")
     ap.add_argument(
         "--feature_angle",
         default=pi / 2,
@@ -124,8 +126,8 @@ def N_channels_to_one(image: np.ndarray) -> np.ndarray:
     # You could also just select one of the channels in question
 
 
-# def load_cached_data(cache_path: str) -> List[List[Tuple]]:
-def load_cached_data(cache_path: str) -> pd.DataFrame:
+# def load_cached_data(cache_path: str) -> pd.DataFrame:
+def load_cached_data(cache_path: str) -> List[List[Tuple]]:
     # Ensure .cache path exists
     assert os.path.exists(cache_path) and os.path.isdir(
         cache_path
@@ -140,14 +142,18 @@ def load_cached_data(cache_path: str) -> pd.DataFrame:
     for file in os.listdir(cache_path):
         # Check if the file is an .npy
         if ".parquet" in file:
-            df = pd.read_parquet(file)
+            file_path = os.path.join(cache_path, file)
+            df = pd.read_parquet(file_path)
             for _, row in df.iterrows():
-                samples.append(row.tolist())
+                samples.append(row[4:].tolist())
         load_bar.update(1)
     logger.info(f"Obtained a total of {len(samples)} files")
 
     frame = pd.DataFrame(samples).sample(frac=1).reset_index(drop=True)
-    return frame
+    print(f"frame shape is {frame.shape}")
+    # Just give me back a list
+    simple_list = frame.values.tolist()
+    return simple_list
 
 
 if __name__ == "__main__":
@@ -176,9 +182,8 @@ if __name__ == "__main__":
 
     logger.info("Dataset loaded")
     # Sample Uniformly
-    exit()
     # Create model-related objects
-    model = Model(args.channels, 1)
+    model = Model(args.image_channels, 1)
     logger.info("Model Structure looks like:")
     logger.info(model)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.00001)
@@ -195,6 +200,7 @@ if __name__ == "__main__":
     # TODO: Add support for missing points using compressed sensing
 
     # Train Loop
+    logger.info(f"Length of dataset is {len(ds_train)}")
     num_batches = len(ds_train) // args.batch_size  # Throwing remainder
     model.train()
     # For graphing later
@@ -210,8 +216,8 @@ if __name__ == "__main__":
             batch = torch.Tensor(
                 ds_train[b * args.batch_size : (b + 1) * args.batch_size]
             )
-            x = batch[:, :-1]
-            y = batch[:, -1]
+            y = batch[:, 0]
+            x = batch[:, 1:]
 
             # Train
             y_pred = model(x)
