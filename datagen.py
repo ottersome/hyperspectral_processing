@@ -7,7 +7,7 @@ For sources see:
 import math
 import os
 from argparse import ArgumentParser
-from math import pi
+from math import floor, pi
 from pathlib import Path
 from typing import List, Tuple
 
@@ -60,25 +60,64 @@ def getargs():
         type=float,
         help="Models how much the thickness changes around mean.",
     )
+    ap.add_argument(
+        "--num_thickness_smaples",
+        default=885,
+        type=int,
+        help="How many samplews to extract from thickness",
+    )
+    ap.add_argument(
+        "--thickimage_radius",
+        default=150,
+        help="Radius of image centered at 0,0 representing thickness",
+    )
 
     return ap.parse_args()
 
 
-def sample_thick_map(thick_map: np.ndarray, samples=885):
+def sample_thick_map(
+    thick_map: np.ndarray,
+    aoi_offset: Point,
+    aoi_radius: float,
+    samples=885,
+):
     """
     Will return only 885 samples normalized in coordinates
     """
     set_of_tuples = {}
     while len(set_of_tuples) < samples:
-        i = np.random.randint(0, thick_map.shape[0] - 1)
-        j = np.random.randint(0, thick_map.shape[1] - 1)
+        theta = np.random.uniform(0, 2 * np.pi)
+        random_radius = np.random.uniform(0, aoi_radius)
+
+        i = int(aoi_offset.y - random_radius * np.sin(theta))
+        j = int(aoi_offset.x + random_radius * np.cos(theta))
+
         set_of_tuples[(i, j)] = thick_map[i, j]
+
     idxs = np.array([list(k) for k in set_of_tuples.keys()], dtype=np.float32)
 
     vals = np.array(list(set_of_tuples.values()))
     final_vals = np.concatenate((idxs, vals.reshape(-1, 1)), axis=1)
 
     return final_vals
+
+
+def imagecoords_to_thickcoords(
+    points: np.ndarray, img_aoi_center: Point, img_aoi_radius: float, thick_radius=150
+) -> np.ndarray:
+    """
+    Points: nx2 matrix where first column is i and second is j
+    """
+    # Create scale matrix(img to thick coordinates)
+    translate_vector = np.array([-img_aoi_center.y, -img_aoi_center.x])
+    pointst = points + np.stack([translate_vector] * points.shape[0], axis=0)
+    pointst = np.multiply(pointst, np.stack(([-1, 1],) * points.shape[0], axis=0))
+    scale_matrix = np.array(
+        [[thick_radius / img_aoi_radius, 0], [0, thick_radius / img_aoi_radius]]
+    )
+    new_scaled = scale_matrix @ pointst.T
+
+    return new_scaled.T
 
 
 def rotate_image(img: np.ndarray, radians: float):
@@ -278,7 +317,7 @@ def ds_creation(
         plt.colorbar()
         plt.show()
 
-    return thick_map, hyper_img
+    return thick_map, hyper_img, aoi_offset, aoi_radius
 
 
 def band_calculation(idx: int, thick_map: np.ndarray, should_noise: bool):
@@ -357,6 +396,9 @@ if __name__ == "__main__":
     for i in range(args.data_points):
         date_time = pd.Timestamp.now().strftime("%Y-%m-%d_%H-%M-%S")
         thickness_path = Path(args.save_dir) / f"target_{date_time}.parquet"
+        thickness_subsampled_path = (
+            Path(args.save_dir) / f"target_subsampled{date_time}.parquet"
+        )
         hyperspec_path = Path(args.save_dir) / f"features_{date_time}.parquet"
 
         # Load Feature image(Single channel)
@@ -364,7 +406,7 @@ if __name__ == "__main__":
 
         # Create Datasets
         bar.set_description("Creating datasets")
-        thick_map, hyper_img = ds_creation(
+        thick_map, hyper_img, aoi_offset, aoi_radius = ds_creation(
             Point(args.resolution[1], args.resolution[0]),
             args.num_bands,
             args.should_noise,
@@ -378,15 +420,28 @@ if __name__ == "__main__":
             args.blemish_radius,
         )
         # SubSample Dataset
-        bar.set_description("Subsampling Data")
-        sampled_thick_map = sample_thick_map(thick_map)
+        bar.set_description(f"Subsampling {args.num_samples} Data from thickness image")
+        sampled_thick_map = sample_thick_map(
+            thick_map, aoi_offset, aoi_radius, args.num_samples
+        )
+        # Noramalize to have origin at 0,0 and radius of 150
+        ij = sampled_thick_map[:, [0, 1]]
+        xy = imagecoords_to_thickcoords(ij, aoi_offset, aoi_radius)
+
+        for x, y in zip(xy[:, 0], xy[:, 1]):
+            length = floor(np.sqrt(x**2 + y**2))
+            assert (
+                length <= args.thickimage_radius
+            ), f"過了 with values x:{x},y:{y} and length:{length}"
+        sampled_thick_map[:, [0, 1]] = xy
+
         # sampled_thick_map[:, 0] /= args.resolution[0]
         # sampled_thick_map[:, 1] /= args.resolution[1]
 
         bar.set_description("Saving thickness data")
         columns_A = ["X", "Y", "Thickness"]
         pd.DataFrame(sampled_thick_map, columns=columns_A).to_parquet(
-            thickness_path, index=False
+            thickness_subsampled_path, index=False
         )
 
         # Process data as final presentation format
