@@ -5,14 +5,36 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 import pandas as pd
+from screeninfo import get_monitors
 
-from ..utils.utils import create_logger
+from ..utils.utils import create_logger, Point
 
 Point = namedtuple("Point", ["x", "y"])
 ORIENTATIONS_RAD = [np.pi / 2, np.pi, 3 * np.pi / 2, 0]
 
 logger = create_logger(os.path.basename(__file__))
 
+def get_screen_resolution():
+    for m in get_monitors():
+        return Point(m.width, m.height)
+    
+def resize_image_to_screen(img: np.ndarray) -> Tuple[np.ndarray,float]:
+    scrnw,scrnh = get_screen_resolution()
+    imgh,imgw = img.shape[:2]
+    scaling_factor = min(scrnw/imgw, scrnh/imgh)
+    new_width, new_height = (int(imgw*scaling_factor),int(imgh*scaling_factor))
+    print(f"New dith and height are {new_width}, {new_height}")
+    new_image = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_AREA)
+    return new_image,scaling_factor
+
+def rescale_points(original_size: Point, new_size:Point, point:Point):
+    scalew, scaley = (new_size.x/original_size.x, new_size.y/ original_size.y)
+    assert scalew == scaley, "We are not support this"
+    new_point = Point(
+        point.x*scalew, point.y*scaley
+        )
+    return new_point
+    
 
 def find_circle(b, c, d) -> Tuple[Point, int]:
     """
@@ -54,7 +76,7 @@ def chords_to_circle(img: np.ndarray) -> Tuple[Point, int]:
 
     cv2.namedWindow("image")
     # Set Size of window
-    cv2.resizeWindow("image", 300, 300)
+    cv2.resizeWindow("image")
     cv2.setMouseCallback("image", on_mouse)
     print(f"Image {img}")
     cv2.imshow("image", img)
