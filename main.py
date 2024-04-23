@@ -40,6 +40,10 @@ DataSet = List[List[Any]]
 # For debugging later
 logger = create_logger(os.path.abspath(__file__))
 
+set_detect_anomaly(True)
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+set_detect_anomaly(True)
+
 
 def arguments():
     """
@@ -59,10 +63,10 @@ def arguments():
     )
 
     ap.add_argument(
-        "--image_channels", default=122, type=int, help="Size of model's input"
+        "--image_channels", default=120, type=int, help="Size of model's input"
     )
-    ap.add_argument("--image_height", default=1024, help="Hyperspectral image height.")
-    ap.add_argument("--image_width", default=1280, help="Hyperspectral image width")
+    ap.add_argument("--image_height", default=1280, help="Hyperspectral image height.")
+    ap.add_argument("--image_width", default=1024, help="Hyperspectral image width")
     ap.add_argument(
         "--feature_angle",
         default=pi / 2,
@@ -75,7 +79,7 @@ def arguments():
     )
 
     # Parmeters for training
-    ap.add_argument("--epochs", default=10, type=int, help="Training Epochs")
+    ap.add_argument("--epochs", default=100, type=int, help="Training Epochs")
     ap.add_argument("--batch_size", default=32, help="Batch Size")
     ap.add_argument("--random_seed", default=42, help="Seed for psudo-randomness")
     ap.add_argument(
@@ -186,7 +190,7 @@ if __name__ == "__main__":
     model = Model(args.image_channels, 1)
     logger.info("Model Structure looks like:")
     logger.info(model)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.00001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     criterium = torch.nn.MSELoss()
     # TODO: scheduler  = ... (if necessary)
 
