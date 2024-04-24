@@ -14,10 +14,10 @@ ORIENTATIONS_RAD = [np.pi / 2, np.pi, 3 * np.pi / 2, 0]
 
 logger = create_logger(os.path.basename(__file__))
 
+
 def get_screen_resolution():
     for m in get_monitors():
         return Point(m.width, m.height)
-    
 
 
 def resize_image_to_screen(img: np.ndarray) -> Tuple[np.ndarray, float]:
@@ -93,12 +93,12 @@ def chords_to_circle(img: np.ndarray) -> Tuple[Point, int]:
 
 # TODO: find a distinctive feature to base rotation from
 def find_distinctive_feature_coords(
-    img_gray: np.ndarray, feature_gray: np.ndarray
+    og_img: np.ndarray, og_feature: np.ndarray
 ) -> Point:
-    assert len(img_gray.shape) == 2, f"Input image must be 2d"
-    assert len(feature_gray.shape) == 2, "Input feature map must be 2D"
-    img_gray = img_gray.astype(np.float32)
-    feature_gray = feature_gray.astype(np.float32)
+    assert len(og_img.shape) == 2, f"Input image must be 2d"
+    assert len(og_feature.shape) == 2, "Input feature map must be 2D"
+    img_gray = og_img.copy().astype(np.float32)
+    feature_gray = og_feature.copy().astype(np.float32)
     # Find distinctive feature
     # For now we will use the center of the circle
     # img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -110,6 +110,9 @@ def find_distinctive_feature_coords(
     cur_maxval = 0
     cur_loc = [-1, -1]
 
+    print(f"Image we will use is of shape {img_gray.shape}")
+    max_vals = []
+    max_locs = []
     for r in ORIENTATIONS_RAD:
         score_matrix = cv2.matchTemplate(img_gray, feature_gray, 3)
         rotation = cv2.getRotationMatrix2D(
@@ -117,13 +120,23 @@ def find_distinctive_feature_coords(
         )
         feature_gray = cv2.warpAffine(feature_gray, rotation, (feat_width, feat_height))
         _, max_val, _, topleft_loc = cv2.minMaxLoc(score_matrix)
-        if max_val > cur_maxval:
-            cur_maxval = max_val
-            cur_loc = topleft_loc
+        max_vals.append(max_val)
+        max_locs.append(topleft_loc)
 
-    assert cur_loc[0] != -1, cur_loc[1] != -1
+    # Show the max cal for all orientations
+    print("Max vals")
+    for i, mv in enumerate(max_vals):
+        print(
+            f"For orientation {np.degrees(ORIENTATIONS_RAD[i])} max_val {mv} and position{max_locs[i]}"
+        )
 
-    feat_center = Point(cur_loc[0] + feat_width // 2, cur_loc[1] + feat_height // 2)
+    max_idx = np.argmax(max_vals)
+    print(f"Picking is {max_idx}")
+    max_loc = max_locs[max_idx]
+
+    feat_center = Point(
+        int(max_loc[1] + feat_width // 2), int(max_loc[0] + feat_height // 2)
+    )
 
     return feat_center
 
@@ -136,7 +149,7 @@ def prompt_for_surrounding_points(image_window_id: str) -> List[Point]:
 
     def on_mouse(event, x, y, flags, params):
         if event == cv2.EVENT_LBUTTONDOWN:
-            clicks.append((x, y))
+            clicks.append(Point(x, y))
 
     cv2.setMouseCallback(image_window_id, on_mouse)
     # Quit only after three clicks
@@ -211,6 +224,81 @@ def get_croppedRotated_img(
     return final_image
 
 
+def cropImage(img: np.ndarray, circle_location: Point, circle_radius):
+    """
+    Parameters
+    ----------
+        - img (np.ndarray): image containing src information,
+        - feature_location (Point): where feature of interest is location
+        - circle_location (Point): circle locations
+        - circle_radius (int): radius of circle
+        - preferred_angle (float): angle at which we want our feature
+    Returns
+    -------
+        - final_image: Already cropped image
+    """
+
+    # First, crop the image
+    print(f"Using circle location point: {circle_location} with radius _circle_radius")
+    cropped = img[
+        circle_location.y - circle_radius : circle_location.y + circle_radius,
+        circle_location.x - circle_radius : circle_location.x + circle_radius,
+        :,
+    ]
+    return cropped
+
+
+def rotate_according_to_feature(
+    image: np.ndarray, feature_loc: Point, preferred_angle: float
+):
+    # Angle between args.direction and
+    xcenter, ycenter = (image.shape[1] // 2, image.shape[0] // 2)
+    feat_from_center = Point(
+        feature_loc.x - xcenter,
+        -(feature_loc.y - ycenter),
+    )
+    print(f"Feature from center {feat_from_center}")
+    feature_angle = np.arctan2(feat_from_center.y, feat_from_center.x)
+    print(f"Feature angle is rad: {feature_angle} deg: {np.degrees(feature_angle)}")
+    print(
+        f"Preferred angle is rad: {preferred_angle} deg: {np.degrees(preferred_angle)}"
+    )
+    rotation_angle = preferred_angle - feature_angle
+
+    rotation_matrix = cv2.getRotationMatrix2D(
+        (ycenter, xcenter), np.degrees(rotation_angle), 1
+    )
+
+    final_image = cv2.warpAffine(
+        image, rotation_matrix, (image.shape[0], image.shape[1])
+    )
+
+    return final_image
+
+
+def store_all_channels(img: np.ndarray):
+    """For debugging mostly"""
+    from pathlib import Path
+
+    place = Path.cwd() / "imglogs/"
+    Path(place).mkdir(parents=True, exist_ok=True)
+    for c in range(img.shape[2]):
+        # Save the cth channel into
+        specific_place = Path(place) / f"channel_{c:3d}.png"
+        normalized = cv2.normalize(
+            img[:, :, c], None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+        )
+        cv2.imwrite(str(specific_place), normalized)
+
+
+def fix_rotation(choice: int, img: np.ndarray) -> np.ndarray:
+    assert choice in [1, 2, 3], "Choice must be 1, 2 or 3"
+    center = Point(img.shape[1] // 2, img.shape[0] // 2)
+    fix_rotation_matrix = cv2.getRotationMatrix2D(center, 90 * choice, 1)
+    final_image = cv2.warpAffine(img, fix_rotation_matrix, (img.shape[0], img.shape[1]))
+    return final_image
+
+
 def get_standard_source(
     src: pd.DataFrame,
     template_loc: str,
@@ -232,75 +320,83 @@ def get_standard_source(
 
     while not satisfied:
         # Prompt for points of interest
-        # gray_img = np.mean(img, axis=-1) if img.shape[2] > 1 else img  # READ ONLY
-        gray_img = img[:, :, 0].squeeze() if img.shape[2] > 1 else img  # READ ONLY
+        # gray_img = np.mean(img, axis=-1) if img.shape[2] > 1 else img  # READ
+
+        gray_img = img[:, :, 60].squeeze() if img.shape[2] > 1 else img  # READ ONLY
+        gray_img = np.mean(img, axis=-1)
+
         visual_rep = np.stack((gray_img,) * 3, axis=-1).astype(
             np.float32
-        )  # Visual changes happen here
-        print(f"Show shape {visual_rep.shape}")
-
+        )  # Visual changes happen here'
         # Show Image for changes
         cv2.namedWindow("image")
-        cv2.resizeWindow("image", 300, 300)
-        cv2.imshow("image", visual_rep)
-
+        visual_rep, scaling_factor = resize_image_to_screen(visual_rep)
+        visual_rep = cv2.normalize(
+            visual_rep, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+        )
         # Ask user to select within the imagek
-        print("Please select three points in circle to find radius and center...")
-        points = prompt_for_surrounding_points("image")
+        cv2.imshow("image", visual_rep)
+        points_visual = prompt_for_surrounding_points("image")
+        cv2.destroyWindow("image")
 
         # Find Area of Interest
         (
-            circle_of_interest_coords,
-            circle_of_interest_radius,
-        ) = find_circle(*points)
+            circle_of_interest_coords_visual,
+            circle_of_interest_radius_visual,
+        ) = find_circle(*points_visual)
 
-        # Find Feature of Interest
+        circle_of_interest_coords_true = Point(
+            int(circle_of_interest_coords_visual.x * (1 / scaling_factor)),
+            int(circle_of_interest_coords_visual.y * (1 / scaling_factor)),
+        )
+        circle_of_interest_radius_true = int(
+            circle_of_interest_radius_visual * (1 / scaling_factor)
+        )
+        # Now Crop
+        cropped_img_true = cropImage(
+            img, circle_of_interest_coords_true, circle_of_interest_radius_true
+        )
+        # Feature of interest
+        feature_of_interest = find_distinctive_feature_coords(
+            cropped_img_true[:, :, 60], template_img
+        )
+        # Rotate the Image(according to feature of interest)
+        rotated_img = rotate_according_to_feature(
+            cropped_img_true, feature_of_interest, feature_angle
+        )
+        visual_img = np.stack((rotated_img[:, :, 60].copy(),) * 3, axis=-1)
+        visual_img = cv2.normalize(  # type: ignore
+            visual_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U  # type : ignore
+        )
+        # Prompt user for corrections
         print(
-            f"Center of image found at {circle_of_interest_coords} with radius {circle_of_interest_radius}"
+            "Cropping and feature finding has been executed. Please select:\n"
+            "1) Rotate the image 90 degrees\n"
+            "2) Rotate the image 180 degrees\n"
+            "3) Rotate the image 270 degrees\n"
+            "4) Continue"
         )
-
-        cv2.circle(
-            visual_rep,
-            circle_of_interest_coords,
-            circle_of_interest_radius,
-            (0, 255, 0),
-        )
-
-        feature_of_interest = find_distinctive_feature_coords(gray_img, template_img)
-        cv2.circle(visual_rep, feature_of_interest, 3, (0, 0, 255))
-        cv2.imshow("image", visual_rep)
-
-        cv2.waitKey(5000)
-        cv2.destroyWindow("image")
-
-        # TODO: check for radii that result outside of image
-        # Cropping Coordinates
-
-        cropped_image = get_croppedRotated_img(
-            img,
-            feature_of_interest,
-            circle_of_interest_coords,
-            circle_of_interest_radius,
-            feature_angle,
-        )
-        cropped_vis = get_croppedRotated_img(
-            visual_rep,
-            feature_of_interest,
-            circle_of_interest_coords,
-            circle_of_interest_radius,
-            feature_angle,
-        )
-
-        # Show Image
-        cv2.imshow("image", cropped_vis)
+        cv2.imshow("image", visual_img)
         cv2.waitKey(1)
+        decision = input("Your choice (and Enter)")
+        if decision in ["1", "2", "3"]:
+            decision = int(decision)
+            print(f"Rotating {90*decision}")
+            rotated_img = fix_rotation(decision, rotated_img)
+        else:
+            print("Continuing")
 
         # Look for circles to remove
-        print("Please select area to remove")
+        print("Please select area to remove (blindspot)")
         ignore_points = prompt_for_surrounding_points("image")
         ignore_circle_coords, ignore_circle_radius = find_circle(*ignore_points)
-        cv2.circle(cropped_vis, ignore_circle_coords, ignore_circle_radius, (255, 0, 0))
-        cv2.imshow("image", cropped_vis)
+        # TODO: actually ignore the points
+        visual_img = np.stack((rotated_img[:, :, 60],) * 3, axis=-1)
+        visual_img = cv2.normalize(  # type: ignore
+            visual_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U  # type : ignore
+        )
+        cv2.circle(visual_img, ignore_circle_coords, ignore_circle_radius, (255, 0, 0))
+        cv2.imshow("image", visual_img)
         cv2.waitKey(1)
 
         satisfied = input("Is the image satisfactory? (y/n): ") == "y"
