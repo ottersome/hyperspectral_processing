@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from screeninfo import get_monitors
 
-from ..utils.utils import create_logger, Point
+from ..utils.utils import Point, create_logger
 
 Point = namedtuple("Point", ["x", "y"])
 ORIENTATIONS_RAD = [np.pi / 2, np.pi, 3 * np.pi / 2, 0]
@@ -18,23 +18,24 @@ def get_screen_resolution():
     for m in get_monitors():
         return Point(m.width, m.height)
     
-def resize_image_to_screen(img: np.ndarray) -> Tuple[np.ndarray,float]:
-    scrnw,scrnh = get_screen_resolution()
-    imgh,imgw = img.shape[:2]
-    scaling_factor = min(scrnw/imgw, scrnh/imgh)
-    new_width, new_height = (int(imgw*scaling_factor),int(imgh*scaling_factor))
+
+
+def resize_image_to_screen(img: np.ndarray) -> Tuple[np.ndarray, float]:
+    scrnw, scrnh = get_screen_resolution()
+    imgh, imgw = img.shape[:2]
+    scaling_factor = min(scrnw / imgw, scrnh / imgh)
+    new_width, new_height = (int(imgw * scaling_factor), int(imgh * scaling_factor))
     print(f"New dith and height are {new_width}, {new_height}")
     new_image = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_AREA)
-    return new_image,scaling_factor
+    return new_image, scaling_factor
 
-def rescale_points(original_size: Point, new_size:Point, point:Point):
-    scalew, scaley = (new_size.x/original_size.x, new_size.y/ original_size.y)
+
+def rescale_points(original_size: Point, new_size: Point, point: Point):
+    scalew, scaley = (new_size.x / original_size.x, new_size.y / original_size.y)
     assert scalew == scaley, "We are not support this"
-    new_point = Point(
-        point.x*scalew, point.y*scaley
-        )
+    new_point = Point(point.x * scalew, point.y * scaley)
     return new_point
-    
+
 
 def find_circle(b, c, d) -> Tuple[Point, int]:
     """
