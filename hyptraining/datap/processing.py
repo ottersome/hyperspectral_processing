@@ -397,7 +397,13 @@ def get_standard_source(
         if decision in ["1", "2", "3"]:
             decision = int(decision)
             print(f"Rotating {90*decision}")
-            rotated_img = fix_rotation(decision, rotated_img)
+            rotated_img = fix_rotation(decision, cropped_img_true)
+            visual_img = np.stack((rotated_img[:, :, 60].copy(),) * 3, axis=-1)
+            visual_img = cv2.normalize(  # type: ignore
+                visual_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U  # type : ignore
+            )    
+            cv2.imshow("image", visual_img)
+            cv2.waitKey(100)
         else:
             print("Continuing")
 
