@@ -69,7 +69,7 @@ def arguments():
     ap.add_argument("--image_width", default=1024, help="Hyperspectral image width")
     ap.add_argument(
         "--feature_angle",
-        default=0,
+        default=pi/2,
         help="How we want the feature to be oriented on all data points.",
     )
     ap.add_argument(
