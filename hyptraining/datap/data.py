@@ -1,18 +1,21 @@
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Union
 
 import numpy as np
 import pandas as pd
 
 from ..utils.utils import Point, create_logger
-from .processing import get_standard_source
+from .processing import Circle, get_standard_source
 
 file_path = os.path.basename(__file__)
 DATA_LOGGER = create_logger(file_path)
 
 
-def thickness_to_hyper_coords(x, y, img_height, img_width) -> Point:
+def thickness_to_hyper_coords(
+    x: Union[np.ndarray, int],
+    y: Union[np.ndarray, np.ndarray],  # , img_height, img_width
+) -> Point:
     """
     function you may fill with a mapping of:
         (u,v) coordinates in wafer space to (x,y) coordinates in pixel space
@@ -20,8 +23,31 @@ def thickness_to_hyper_coords(x, y, img_height, img_width) -> Point:
     return Point(int(x * (483 / 150) + 515), int(y * (483 / 150) + 518))
 
 
+def in_circle(point: Point, circle: Circle) -> bool:
+    """
+    Check if a point is within a circle
+    """
+    return (point.x - circle.center.x) ** 2 + (
+        point.y - circle.center.y
+    ) ** 2 <= circle.radius**2
+
+
+def nchannel_img_to_array(
+    img: np.ndarray,
+) -> pd.DataFrame:
+    # Flatten it out so that channels are columns in second axis and add
+    # new i,j columns that index it
+    # img is 3d
+    i, j = np.indices(img.shape[:2])
+    img_reshape = img.reshape(-1, img.shape[2])
+    tabular_img = np.dstack([i, j, img_reshape])
+    cols = ["i", "j"] + [f"c{i}" for i in range(img.shape[2])]
+    dataframe = pd.DataFrame(tabular_img, columns=cols)  # type:ignore
+    return dataframe
+
+
 def combine_srctarg_into_sample(
-    src_img: np.ndarray, target: pd.DataFrame
+    src_img: np.ndarray, target: pd.DataFrame, ignore_spot: Circle
 ) -> List[tuple]:
     """
     Will look at target and find corresponding elements in source to keep
@@ -29,15 +55,26 @@ def combine_srctarg_into_sample(
     new_rows = []
     for _, row in target.iterrows():
         x, y = row[["X", "Y"]]
-        t = row["Thickness"]
-        i, j = thickness_to_hyper_coords(x, y, src_img.shape[0], src_img.shape[1])
+        t = row["SiOTHK___"]
+        hyper_point = thickness_to_hyper_coords(x, y)
+        # Convert image into array
+        if in_circle(hyper_point, ignore_spot):
+            print("Found target on blindspot")
+            continue  # Just dont use it
 
         # Source
+        ij_features = src_img[hyper_point.x, hyper_point.y, :]
 
-        ij_features = src_img[i, j, :]
+        print(f"ADding {ij_features.shape} channels.")
 
-        debugging_feetures = [x, y, i, j]  # Not really necessary
+        debugging_feetures = [
+            x,
+            y,
+            hyper_point.x,
+            hyper_point.y,
+        ]  # Not really necessary
         new_tuple = debugging_feetures + [t] + ij_features.tolist()
+        print(f"ADding tuple of length {len(new_tuple)}")
         new_rows.append(new_tuple)
         # TODO: maybe add more stuff to the row
 
@@ -94,7 +131,7 @@ def preprocess_data(
             source_image = _read_source(os.path.join(rawdata_dir, featurefile_name))
 
             # Get the final image in the size that we want
-            standard_source: np.ndarray = get_standard_source(
+            standard_source, ignore_spot = get_standard_source(
                 src=source_image,
                 template_loc=template_loc,
                 src_width=source_width,
@@ -106,7 +143,9 @@ def preprocess_data(
             # Form the rows from the target
             print(f"Standard source shape {standard_source.shape}")
             print(f"Targe_rowsshape {target_rows.shape}")
-            final_rows = combine_srctarg_into_sample(standard_source, target_rows)
+            final_rows = combine_srctarg_into_sample(
+                standard_source, target_rows, ignore_spot
+            )
 
             pd.DataFrame(final_rows, columns=columns).to_parquet(
                 saveto_path, index=False
@@ -114,8 +153,6 @@ def preprocess_data(
 
             # Save to final_rows to some file
             DATA_LOGGER.info(f"`{file}` added to cache  as `{saveto_path}`")
-
-    # ds_a = pd.read_parquet(args.thick_loc)  # Dataset A
 
     DATA_LOGGER.info("Finished preprocessing")
 

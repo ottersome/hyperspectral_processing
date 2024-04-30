@@ -1,6 +1,7 @@
 import os
 from collections import namedtuple
-from typing import List, Tuple
+from dataclasses import dataclass
+from typing import Any, List, Tuple, Union
 
 import cv2
 import numpy as np
@@ -10,6 +11,14 @@ from screeninfo import get_monitors
 from ..utils.utils import Point, create_logger
 
 Point = namedtuple("Point", ["x", "y"])
+
+
+@dataclass
+class Circle:
+    center: Point
+    radius: int
+
+
 ORIENTATIONS_RAD = [np.pi / 2, np.pi, 3 * np.pi / 2, 0]
 
 logger = create_logger(os.path.basename(__file__))
@@ -25,7 +34,6 @@ def resize_image_to_screen(img: np.ndarray) -> Tuple[np.ndarray, float]:
     imgh, imgw = img.shape[:2]
     scaling_factor = min(scrnw / imgw, scrnh / imgh)
     new_width, new_height = (int(imgw * scaling_factor), int(imgh * scaling_factor))
-    print(f"New dith and height are {new_width}, {new_height}")
     new_image = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_AREA)
     return new_image, scaling_factor
 
@@ -306,17 +314,17 @@ def get_standard_source(
     src_height: int,
     src_channels: int,
     feature_angle: float,  # Should be radians
-) -> np.ndarray:
+) -> Tuple[np.ndarray, Circle]:
     # Template Image:
     template_img = cv2.imread(template_loc, cv2.IMREAD_GRAYSCALE)
-    print(f"Template image size is {template_img.shape}")
     # Select 2-N columns from dataset
     img_columns = src.iloc[:, 2:]
     img: np.ndarray = df_to_img(img_columns, src_width, src_height, src_channels)
 
     # Get Cropped-in Image
     satisfied = False
-    cropped_image = np.ndarray([])
+    final_img = np.ndarray([])
+    ignore_spot = Circle(Point(0, 0), 0.0)
 
     while not satisfied:
         # Prompt for points of interest
@@ -336,9 +344,11 @@ def get_standard_source(
         )
         # Ask user to select within the imagek
         cv2.imshow("image", visual_rep)
+        print("Please select three points to be used to find circle.")
         points_visual = prompt_for_surrounding_points("image")
         cv2.destroyWindow("image")
 
+        print("Using selection points to find circle...")
         # Find Area of Interest
         (
             circle_of_interest_coords_visual,
@@ -352,15 +362,20 @@ def get_standard_source(
         circle_of_interest_radius_true = int(
             circle_of_interest_radius_visual * (1 / scaling_factor)
         )
+        print("Cropping image around the diameter of the circle.")
         # Now Crop
         cropped_img_true = cropImage(
             img, circle_of_interest_coords_true, circle_of_interest_radius_true
         )
+        print("Automatically finding the features for alignment.")
         # Feature of interest
         feature_of_interest = find_distinctive_feature_coords(
             cropped_img_true[:, :, 60], template_img
         )
         # Rotate the Image(according to feature of interest)
+        print(
+            f"Aligning image according to feature. Feature should be at {feature_angle} degrees"
+        )
         rotated_img = rotate_according_to_feature(
             cropped_img_true, feature_of_interest, feature_angle
         )
@@ -377,8 +392,8 @@ def get_standard_source(
             "4) Continue"
         )
         cv2.imshow("image", visual_img)
-        cv2.waitKey(1)
-        decision = input("Your choice (and Enter)")
+        cv2.waitKey(100)
+        decision = input("Your choice (and Enter): ")
         if decision in ["1", "2", "3"]:
             decision = int(decision)
             print(f"Rotating {90*decision}")
@@ -387,13 +402,13 @@ def get_standard_source(
             print("Continuing")
 
         # Look for circles to remove
-        print("Please select area to remove (blindspot)")
+        print("Please select area to remove (ignore)")
         ignore_points = prompt_for_surrounding_points("image")
         ignore_circle_coords, ignore_circle_radius = find_circle(*ignore_points)
         # TODO: actually ignore the points
         visual_img = np.stack((rotated_img[:, :, 60],) * 3, axis=-1)
-        visual_img = cv2.normalize(  # type: ignore
-            visual_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U  # type : ignore
+        visual_img = cv2.normalize(
+            visual_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
         )
         cv2.circle(visual_img, ignore_circle_coords, ignore_circle_radius, (255, 0, 0))
         cv2.imshow("image", visual_img)
@@ -403,10 +418,14 @@ def get_standard_source(
         if not satisfied:
             cv2.destroyAllWindows()
         else:
+            final_img = cv2.resize(
+                rotated_img,
+                (src_height, src_width),
+                interpolation=cv2.INTER_LINEAR,
+            )  # CHECK: not sure if we want to interpolate on given data but a shape must be achieved
+            print(f"Final image is of shape {final_img.shape}")
+            ignore_spot = Circle(ignore_circle_coords, ignore_circle_radius)
             break
 
     # Interpolate cropped image to ensure it is (src_height, src_width, src_channels)
-    final_image = cv2.resize(
-        cropped_image, (src_height, src_width), interpolation=cv2.INTER_LINEAR
-    )
-    return final_image
+    return final_img, ignore_spot

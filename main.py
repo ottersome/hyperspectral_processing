@@ -2,7 +2,7 @@ import enum
 import os
 from argparse import ArgumentParser
 from collections import namedtuple
-from math import pi
+from math import pi, sqrt
 from typing import Any, List, Tuple, Union
 
 import matplotlib.pyplot as plt
@@ -41,7 +41,7 @@ DataSet = List[List[Any]]
 logger = create_logger(os.path.abspath(__file__))
 
 set_detect_anomaly(True)
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
 set_detect_anomaly(True)
 
 
@@ -69,7 +69,7 @@ def arguments():
     ap.add_argument("--image_width", default=1024, help="Hyperspectral image width")
     ap.add_argument(
         "--feature_angle",
-        default=pi / 2,
+        default=0,
         help="How we want the feature to be oriented on all data points.",
     )
     ap.add_argument(
@@ -79,9 +79,15 @@ def arguments():
     )
 
     # Parmeters for training
-    ap.add_argument("--epochs", default=100, type=int, help="Training Epochs")
+    ap.add_argument("--epochs", default=10, type=int, help="Training Epochs")
     ap.add_argument("--batch_size", default=32, help="Batch Size")
     ap.add_argument("--random_seed", default=42, help="Seed for psudo-randomness")
+    ap.add_argument(
+        "--weight_decay",
+        default=0.01,
+        type=float,
+        help="Weight Decay for L2 Regularization",
+    )
     ap.add_argument(
         "--train_val_split", default=[0.8, 0.2], help="Train, Test Split"  # Val later
     )
@@ -183,6 +189,8 @@ if __name__ == "__main__":
 
     # Load all cached files
     dataset = load_cached_data(args.cache_path)
+    # Shuffle dataset
+    dataset = np.random.permutation(dataset).tolist()
 
     logger.info("Dataset loaded")
     # Sample Uniformly
@@ -190,7 +198,9 @@ if __name__ == "__main__":
     model = Model(args.image_channels, 1)
     logger.info("Model Structure looks like:")
     logger.info(model)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=0.001, weight_decay=args.weight_decay
+    )
     criterium = torch.nn.MSELoss()
     # TODO: scheduler  = ... (if necessary)
 
@@ -204,9 +214,10 @@ if __name__ == "__main__":
     # TODO: Add support for missing points using compressed sensing
 
     # Train Loop
-    logger.info(f"Length of dataset is {len(ds_train)}")
-    num_batches = len(ds_train) // args.batch_size  # Throwing remainder
-    model.train()
+    logger.info(f"Length of train dataset is {len(ds_train)}")
+    logger.info(f"Length of validation dataset is {len(ds_val)}")
+    num_train_batches = len(ds_train) // args.batch_size  # Throwing remainder
+    num_val_batches = len(ds_val) // args.batch_size  # Throwing remainder
     # For graphing later
     train_losses = []
     val_losses = []
@@ -214,9 +225,14 @@ if __name__ == "__main__":
     ########################################
     # Main Training Loop
     ########################################
+
     for epoch in tqdm(range(args.epochs), desc="Epochs"):
         batch_losses = []
-        for b in range(num_batches):
+
+        ## Training
+        model.train()
+        for b in range(num_train_batches):
+            optimizer.zero_grad()
             batch = torch.Tensor(
                 ds_train[b * args.batch_size : (b + 1) * args.batch_size]
             )
@@ -224,24 +240,24 @@ if __name__ == "__main__":
             x = batch[:, 1:]
 
             # Train
-            y_pred = model(x)
-            loss = criterium(y_pred.squeeze(), y)
+            y_pred = model(x).squeeze()
+            loss = criterium(y_pred, y).mean()
             loss.backward()
             optimizer.step()
-            batch_losses.append(loss.item())
+            batch_losses.append(sqrt(loss.item()))
 
         train_losses.append(sum(batch_losses) / len(batch_losses))
 
-        # Validation
+        ## Validation
         model.eval()
         with torch.no_grad():
             val_batch = torch.Tensor(ds_val)
-            x = val_batch[:, :-1]
-            y = val_batch[:, -1]
-            y_pred = model(x)
-            val_loss = criterium(y_pred.squeeze(), y)
-            val_losses.append(val_loss.item())
-        model.train()
+            x = val_batch[:, 1:]
+            y = val_batch[:, 0]
+
+            y_pred = model(x).squeeze()
+            val_loss = criterium(y_pred, y).mean()
+            val_losses.append(sqrt(val_loss.item()))
 
     # Show Train-Test Performance
     # logger.info(f"Train Losses: {train_losses}")
@@ -251,6 +267,6 @@ if __name__ == "__main__":
     plt.plot(val_losses, label="Val Losses")
     plt.legend()
     plt.title("RMSE Loss vs Epochs")
-    plt.ylabel("MSE Loss")
+    plt.ylabel("RMSE Loss")
     plt.xlabel("Training Epochs")
     plt.show()
