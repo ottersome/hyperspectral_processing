@@ -65,8 +65,6 @@ def combine_srctarg_into_sample(
         # Source
         ij_features = src_img[hyper_point.x, hyper_point.y, :]
 
-        print(f"ADding {ij_features.shape} channels.")
-
         debugging_feetures = [
             x,
             y,
@@ -74,7 +72,6 @@ def combine_srctarg_into_sample(
             hyper_point.y,
         ]  # Not really necessary
         new_tuple = debugging_feetures + [t] + ij_features.tolist()
-        print(f"ADding tuple of length {len(new_tuple)}")
         new_rows.append(new_tuple)
         # TODO: maybe add more stuff to the row
 
@@ -128,7 +125,7 @@ def preprocess_data(
 
             # Find corresponding feature file
             featurefile_name = file.replace("target", "features")
-            source_image = _read_source(os.path.join(rawdata_dir, featurefile_name))
+            source_image = read_source(os.path.join(rawdata_dir, featurefile_name))
 
             # Get the final image in the size that we want
             standard_source, ignore_spot = get_standard_source(
@@ -162,7 +159,7 @@ def preprocess_data(
 ##################################################
 
 
-def _read_source(file_path: str) -> pd.DataFrame:
+def read_source(file_path: str) -> pd.DataFrame:
     """
     Ensure that regardless of source file we get the same type of dataframe out of it
     """

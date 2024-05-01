@@ -132,14 +132,14 @@ def find_distinctive_feature_coords(
         max_locs.append(topleft_loc)
 
     # Show the max cal for all orientations
-    print("Max vals")
-    for i, mv in enumerate(max_vals):
-        print(
-            f"For orientation {np.degrees(ORIENTATIONS_RAD[i])} max_val {mv} and position{max_locs[i]}"
-        )
+    # print("Max vals")
+    # for i, mv in enumerate(max_vals):
+    #     print(
+    #         f"For orientation {np.degrees(ORIENTATIONS_RAD[i])} max_val {mv} and position{max_locs[i]}"
+    #     )
 
     max_idx = np.argmax(max_vals)
-    print(f"Picking is {max_idx}")
+    # print(f"Picking is {max_idx}")
     max_loc = max_locs[max_idx]
 
     feat_center = Point(
@@ -220,6 +220,7 @@ def get_croppedRotated_img(
     print(
         f"Preferred angle is rad: {preferred_angle} deg: {np.degrees(preferred_angle)}"
     )
+    print("Please wait while image is rotated and cropped")
     rotation_angle = preferred_angle - feature_angle
 
     rotation_matrix = cv2.getRotationMatrix2D(
@@ -265,12 +266,7 @@ def rotate_according_to_feature(
         feature_loc.x - xcenter,
         -(feature_loc.y - ycenter),
     )
-    print(f"Feature from center {feat_from_center}")
     feature_angle = np.arctan2(feat_from_center.y, feat_from_center.x)
-    print(f"Feature angle is rad: {feature_angle} deg: {np.degrees(feature_angle)}")
-    print(
-        f"Preferred angle is rad: {preferred_angle} deg: {np.degrees(preferred_angle)}"
-    )
     rotation_angle = preferred_angle - feature_angle
 
     rotation_matrix = cv2.getRotationMatrix2D(
