@@ -51,6 +51,7 @@ def arguments():
     """
     # Parameters for data retrieval
     ap = ArgumentParser()
+    ap.add_argument("--model_name", default="weights")
     ap.add_argument(
         "--rawdata_path",
         default="./data/raw/",
@@ -60,6 +61,11 @@ def arguments():
         "--cache_path",
         default="./data/cache/",
         help="Where to store post-processed data.",
+    )
+    ap.add_argument(
+        "--model_path",
+        default="./models",
+        help="Where to store trained data",
     )
 
     ap.add_argument(
@@ -79,7 +85,7 @@ def arguments():
     )
 
     # Parmeters for training
-    ap.add_argument("--epochs", default=10, type=int, help="Training Epochs")
+    ap.add_argument("--epochs", default=30, type=int, help="Training Epochs")
     ap.add_argument("--batch_size", default=32, help="Batch Size")
     ap.add_argument("--random_seed", default=42, help="Seed for psudo-randomness")
     ap.add_argument(
@@ -258,6 +264,14 @@ if __name__ == "__main__":
             y_pred = model(x).squeeze()
             val_loss = criterium(y_pred, y).mean()
             val_losses.append(sqrt(val_loss.item()))
+            # Calculate R^2
+            ss_res = torch.sum((y - y_pred) ** 2) 
+            ss_tot = torch.sum((y - torch.mean(y)) ** 2)
+            rsqrd = 1 - ss_res / ss_tot
+            
+            logger.info(f"val_loss {sqrt(val_loss.item())}")
+            logger.info(f"R^2  {rsqrd.item()}")
+            
 
     # Show Train-Test Performance
     # logger.info(f"Train Losses: {train_losses}")
@@ -270,3 +284,16 @@ if __name__ == "__main__":
     plt.ylabel("RMSE Loss")
     plt.xlabel("Training Epochs")
     plt.show()
+
+    model_path = os.path.join(args.model_path,f"{args.model_name}.pth")
+    decision = input(f"Would you like to save this model (to {model_path})? (y/N): ")
+    if decision.lower() == "y":
+        os.makedirs(args.model_path, exist_ok=True)
+        metadata_path = os.path.join(args.model_path,f"{args.model_name}.metadata")
+        torch.save(model.state_dict(), model_path)
+        logger.info(f"Model saved at {model_path}")
+        model_dict_str = str(model)
+        with open(metadata_path, "w") as f:
+            f.write(model_dict_str)
+
+
