@@ -311,6 +311,36 @@ def hypdataframe_to_tensor(
     return img
 
 
+def thickess_to_img_space(df: pd.DataFrame) -> np.ndarray:
+    # Crate artificual circumference
+    radius = 1000 // 2
+    img = np.zeros((radius * 2, radius * 2, 3))
+    # Everything without any data will become blue
+    img[:, :, 2] = 0.1
+
+    # Crate outline
+    for theta in np.linspace(0, np.pi, 100):
+        i = min(int(radius * np.cos(theta)) + radius, radius - 1)
+        j = min(int(radius * np.sin(theta)) + radius, radius - 1)
+        # logger.debug(f"forming cicle with ({i},{j})")
+        img[i, j, :] = (0.80, 0, 0)
+
+    df.iloc[:, 2] = (df.iloc[:, 2] - df.iloc[:, 2].min()) / (
+        df.iloc[:, 2].max() - df.iloc[:, 2].min()
+    )  # Thickness normalized
+
+    # Get actual Points
+    for i, (x, y, t) in df.iterrows():
+        logger.debug(f"Going throught the points ({x},{y})")
+        j, i = thickness_to_hyper_coords(x, y)
+        i, j = (int(i), int(j))
+        logger.debug(f"Converted to ({i}, {j})")
+        img[i, j, 1] = t
+    # Normalize thickness
+    # Get the points with actual thickness and put them in the green channel
+    return img
+
+
 def get_standard_source(
     src: pd.DataFrame,
     template_loc: str,
