@@ -8,9 +8,8 @@ import numpy as np
 import pandas as pd
 from screeninfo import get_monitors
 
-from ..utils.utils import Point, create_logger
 
-Point = namedtuple("Point", ["x", "y"])
+from ..utils.utils import create_logger, Point
 
 
 @dataclass
@@ -302,11 +301,15 @@ def fix_rotation(choice: int, img: np.ndarray) -> np.ndarray:
     final_image = cv2.warpAffine(img, fix_rotation_matrix, (img.shape[0], img.shape[1]))
     return final_image
 
-def dataframe_to_tensor(df: pd.DataFrame, src_width:int, src_height: int ) -> np.ndarray:
+
+def hypdataframe_to_tensor(
+    df: pd.DataFrame, src_width: int, src_height: int
+) -> np.ndarray:
     img_columns = df.iloc[:, 2:]
     src_channels = df.shape[1] - 2
     img: np.ndarray = df_to_img(img_columns, src_width, src_height, src_channels)
     return img
+
 
 def get_standard_source(
     src: pd.DataFrame,
@@ -319,7 +322,7 @@ def get_standard_source(
     # Template Image:
     template_img = cv2.imread(template_loc, cv2.IMREAD_GRAYSCALE)
     # Select 2-N columns from dataset
-    img = dataframe_to_tensor(src, src_width, src_height)
+    img = hypdataframe_to_tensor(src, src_width, src_height)
 
     final_img = np.ndarray([])
     ignore_spot = Circle(Point(0, 0), 0.0)
@@ -330,7 +333,7 @@ def get_standard_source(
         # gray_img = np.mean(img, axis=-1) if img.shape[2] > 1 else img  # READ
 
         cropped_n_rotated_img = get_circle_ofinterest(
-            img,  template_img, src_width, src_height, feature_angle
+            img, template_img, src_width, src_height, feature_angle
         )
 
         visual_img = np.stack((cropped_n_rotated_img[:, :, 60],) * 3, axis=-1)
@@ -438,7 +441,12 @@ def get_circle_ofinterest(
         )
         cropped_visual = np.stack((cropped_img_true[:, :, 60].copy(),) * 3, axis=-1)
         cropped_visual = cv2.normalize(  # type: ignore
-            cropped_visual, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U  # type : ignore
+            cropped_visual,
+            None,
+            0,
+            255,
+            cv2.NORM_MINMAX,
+            dtype=cv2.CV_8U,  # type : ignore
         )
         visual_img = np.stack((rotated_img[:, :, 60].copy(),) * 3, axis=-1)
         visual_img = cv2.normalize(  # type: ignore
@@ -449,8 +457,19 @@ def get_circle_ofinterest(
         two_images = np.concatenate((cropped_visual, visual_img), axis=1)
         print(f"Channels of concatenated images {two_images.shape}")
         font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(two_images, "Original", ( 10, 30), font, 1, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(two_images, "After Rotation", (10 + visual_img.shape[1], 30), font, 1, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(
+            two_images, "Original", (10, 30), font, 1, (255, 255, 255), 2, cv2.LINE_AA
+        )
+        cv2.putText(
+            two_images,
+            "After Rotation",
+            (10 + visual_img.shape[1], 30),
+            font,
+            1,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
         cv2.imshow("image", two_images)
         print(
             "Cropping and feature finding has been executed. Please select:\n"
@@ -469,9 +488,25 @@ def get_circle_ofinterest(
             rotated_img = fix_rotation(decision, cropped_img_true)
             visual_img = np.stack((rotated_img[:, :, 60].copy(),) * 3, axis=-1)
             visual_img = cv2.normalize(  # type: ignore
-                visual_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U  # type : ignore
-            )    
+                visual_img,
+                None,
+                0,
+                255,
+                cv2.NORM_MINMAX,
+                dtype=cv2.CV_8U,  # type : ignore
+            )
         else:
             print("Continuing")
         final_img = rotated_img
     return final_img
+
+
+def thickness_to_hyper_coords(
+    x: Union[np.ndarray, int],
+    y: Union[np.ndarray, np.ndarray],  # , img_height, img_width
+) -> Point:
+    """
+    function you may fill with a mapping of:
+        (u,v) coordinates in wafer space to (x,y) coordinates in pixel space
+    """
+    return Point(int(x * (483 / 150) + 515), int(y * (483 / 150) + 518))

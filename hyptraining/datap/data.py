@@ -6,21 +6,10 @@ import numpy as np
 import pandas as pd
 
 from ..utils.utils import Point, create_logger
-from .processing import Circle, get_standard_source
+from .processing import Circle, get_standard_source, thickness_to_hyper_coords
 
 file_path = os.path.basename(__file__)
 DATA_LOGGER = create_logger(file_path)
-
-
-def thickness_to_hyper_coords(
-    x: Union[np.ndarray, int],
-    y: Union[np.ndarray, np.ndarray],  # , img_height, img_width
-) -> Point:
-    """
-    function you may fill with a mapping of:
-        (u,v) coordinates in wafer space to (x,y) coordinates in pixel space
-    """
-    return Point(int(x * (483 / 150) + 515), int(y * (483 / 150) + 518))
 
 
 def in_circle(point: Point, circle: Circle) -> bool:
