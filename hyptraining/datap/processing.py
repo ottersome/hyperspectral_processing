@@ -313,17 +313,19 @@ def hypdataframe_to_tensor(
 
 def thickess_to_img_space(df: pd.DataFrame) -> np.ndarray:
     # Crate artificual circumference
-    radius = 1000 // 2
-    img = np.zeros((radius * 2, radius * 2, 3))
+    dim = 1000
+    radius = dim // 2
+    img = np.zeros((dim, dim, 3))
     # Everything without any data will become blue
     img[:, :, 2] = 0.1
 
     # Crate outline
-    for theta in np.linspace(0, np.pi, 100):
-        i = min(int(radius * np.cos(theta)) + radius, radius - 1)
-        j = min(int(radius * np.sin(theta)) + radius, radius - 1)
-        # logger.debug(f"forming cicle with ({i},{j})")
-        img[i, j, :] = (0.80, 0, 0)
+    for theta in np.linspace(0, 2 * np.pi, 1000):
+        cossy = np.cos(theta)
+        sissy = np.sin(theta)
+        j = min(int(radius * np.cos(theta)) + radius, dim - 1)
+        i = min(int(radius * np.sin(theta)) + radius, dim - 1)
+        img[i, j, 0] = 1
 
     df.iloc[:, 2] = (df.iloc[:, 2] - df.iloc[:, 2].min()) / (
         df.iloc[:, 2].max() - df.iloc[:, 2].min()
@@ -331,10 +333,10 @@ def thickess_to_img_space(df: pd.DataFrame) -> np.ndarray:
 
     # Get actual Points
     for i, (x, y, t) in df.iterrows():
-        logger.debug(f"Going throught the points ({x},{y})")
+        # logger.debug(f"Going throught the points ({x},{y})")
         j, i = thickness_to_hyper_coords(x, y)
         i, j = (int(i), int(j))
-        logger.debug(f"Converted to ({i}, {j})")
+        # logger.debug(f"Converted to ({i}, {j})")
         img[i, j, 1] = t
     # Normalize thickness
     # Get the points with actual thickness and put them in the green channel
@@ -394,6 +396,7 @@ def get_standard_source(
     # Interpolate cropped image to ensure it is (src_height, src_width, src_channels)
     return final_img, ignore_spot
 
+
 def get_circle_ofinterest(
     img: np.ndarray,
     template_img: np.ndarray,
@@ -440,7 +443,7 @@ def get_circle_ofinterest(
             > visual_rep.shape[0]
         ):
             print("Circle is not within the image. Please try again.")
-            continue 
+            continue
 
         # Tranfer these points to original coordinates
         circle_of_interest_coords_true = Point(
