@@ -1,0 +1,13 @@
+Model(
+  (seq): Sequential(
+    (0): Linear(in_features=120, out_features=240, bias=True)
+    (1): ReLU()
+    (2): Linear(in_features=240, out_features=480, bias=True)
+    (3): ReLU()
+    (4): Linear(in_features=480, out_features=240, bias=True)
+    (5): ReLU()
+    (6): Linear(in_features=240, out_features=120, bias=True)
+    (7): ReLU()
+    (8): Linear(in_features=120, out_features=1, bias=True)
+  )
+)

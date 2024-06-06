@@ -17,9 +17,11 @@ def get_args():
         help="Location of saved model in format *.pth",
     )
     # Start exclusive argument group for either single image or folder of images
+    ap.add_argument("--image_path", help="Path to a single image to evaluate", type=int)
     ap.add_argument(
-        "--image_path",
-        help="Path to a single image to evaluate",
+        "--target_image_size",
+        default=150 * 2,
+        help="Size of the image containing target information (Used for normalization).",
     )
     ap.add_argument("--image_height", default=1280, help="Hyperspectral image height.")
     ap.add_argument("--image_width", default=1024, help="Hyperspectral image width")
@@ -44,7 +46,7 @@ if __name__ == "__main__":
     img_tensor = hypdataframe_to_tensor(
         features_parquet, args.image_width, args.image_height
     )
-    thickness_img = thickess_to_img_space(target_parquet)
+    thickness_img = thickess_to_img_space(target_parquet, args.target_image_size)
     # Make it into thee channels
     # img_averaged = img_tensor.mean(axis=-1)
     # img_final = np.stack((img_averaged,) * 3, axis=2)

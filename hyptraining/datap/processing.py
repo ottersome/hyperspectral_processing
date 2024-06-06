@@ -311,20 +311,17 @@ def hypdataframe_to_tensor(
     return img
 
 
-def thickess_to_img_space(df: pd.DataFrame) -> np.ndarray:
+def thickess_to_img_space(df: pd.DataFrame, image_size: int) -> np.ndarray:
     # Crate artificual circumference
-    dim = 1000
-    radius = dim // 2
-    img = np.zeros((dim, dim, 3))
+    radius = image_size // 2
+    img = np.zeros((image_size, image_size, 3))
     # Everything without any data will become blue
     img[:, :, 2] = 0.1
 
     # Crate outline
     for theta in np.linspace(0, 2 * np.pi, 1000):
-        cossy = np.cos(theta)
-        sissy = np.sin(theta)
-        j = min(int(radius * np.cos(theta)) + radius, dim - 1)
-        i = min(int(radius * np.sin(theta)) + radius, dim - 1)
+        j = min(int(radius * np.cos(theta)) + radius, image_size - 1)
+        i = min(int(radius * np.sin(theta)) + radius, image_size - 1)
         img[i, j, 0] = 1
 
     df.iloc[:, 2] = (df.iloc[:, 2] - df.iloc[:, 2].min()) / (
@@ -333,10 +330,9 @@ def thickess_to_img_space(df: pd.DataFrame) -> np.ndarray:
 
     # Get actual Points
     for i, (x, y, t) in df.iterrows():
-        # logger.debug(f"Going throught the points ({x},{y})")
-        j, i = thickness_to_hyper_coords(x, y)
-        i, j = (int(i), int(j))
-        # logger.debug(f"Converted to ({i}, {j})")
+        # j, i = thickness_to_hyper_coords(x, y)
+        logger.debug(f"Inspection (x,y) = ({x},{y})")
+        i, j = (int(y + radius), int(x + radius))
         img[i, j, 1] = t
     # Normalize thickness
     # Get the points with actual thickness and put them in the green channel
@@ -380,6 +376,8 @@ def get_standard_source(
 
         satisfied = input("Is the image satisfactory? (y/N): ") == "y"
         cv2.destroyAllWindows()
+
+        # CHECK: Resizing here is concerning. Theres gotta be a better way around this
         if satisfied:
             final_img = cv2.resize(
                 cropped_n_rotated_img,
