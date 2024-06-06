@@ -69,6 +69,8 @@ def single_image_view(
     image_height: int,
     desired_angle: float,
 ) -> np.ndarray:
+    # Ensure model is in evaluation
+    model.eval()
     # parquet image
     features_parquet = pd.read_parquet(image_path)
 
@@ -76,30 +78,30 @@ def single_image_view(
     final_img, ignore_spot = get_standard_source(
         features_parquet, template_loc, image_width, image_height, desired_angle
     )
-    img_center = Point(final_img.shape[1] // 2, final_img.shape[0] // 2)
-    logger.debug(f"Now going into the debugging section")
-    predicted_image = np.zeros((final_img.shape[0], final_img.shape[1]))
+    finimg_height, finimg_width, finimg_chan = final_img.shape
+    logger.info(f"Final image shape {final_img.shape}")
 
-    # Finally this image is passed to the angle
-    cache = []
-    for i in range(final_img.shape[0]):
-        for j in range(final_img.shape[1]):
-            # Skip outside of circle
-            ver_ell_term = (i - final_img.shape[0] / 2) / (final_img.shape[0] / 2)
-            hor_ell_term = (j - final_img.shape[1] / 2) / (final_img.shape[1] / 2)
-            # Ensure its within the ellipses
-            if (hor_ell_term**2 + ver_ell_term**2) > 1:
-                continue
-            features = final_img[i, j, :]
-            assert (
-                len(features) == 120
-            ), f"Length of features obtaines is not expected 120 but rather {len(features)}"
-            features = torch.from_numpy(features).to(torch.float32)
+    # Process the features
+    feature_tensor = torch.from_numpy(final_img.reshape(-1, finimg_chan)).to(
+        torch.float32
+    )
+    logger.info(f"Feature tensor is of shape {feature_tensor.shape}")
+    inference = model(feature_tensor)
+    logger.info(f"Inference is of shape {inference.shape}")
+    inference_img = inference.reshape((finimg_height, finimg_width)).detach().numpy()
+    logger.info(f"Reshaped inference is of shape {inference_img.shape}")
 
-            infered_thickness = model(features).detach().numpy().item()
-            predicted_image[i, j] = infered_thickness
+    # Crate ellipse mask:
+    yslice, xslice = np.ogrid[:finimg_height, :finimg_width]
+    vert_ellip_term = (yslice - finimg_height / 2) / (finimg_height / 2)
+    hori_ellip_term = (xslice - finimg_width / 2) / (finimg_width / 2)
 
-    return predicted_image
+    # distances = np.sqrt(vert_ellip_term**2 + hori_ellip_term**2)
+
+    mask = (vert_ellip_term**2 + hori_ellip_term**2) <= 1
+    inference_img[~mask] = 0
+
+    return inference_img
 
 
 if __name__ == "__main__":
