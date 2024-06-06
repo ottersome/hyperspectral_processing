@@ -377,6 +377,10 @@ def get_standard_source(
         satisfied = input("Is the image satisfactory? (y/N): ") == "y"
         cv2.destroyAllWindows()
 
+        final_img = cropped_n_rotated_img
+        ignore_spot = Circle(ignore_circle_coords, ignore_circle_radius)
+
+        # TOREM: old approach
         # if satisfied:
         #     final_img = cv2.resize(
         #         cropped_n_rotated_img,
