@@ -377,16 +377,15 @@ def get_standard_source(
         satisfied = input("Is the image satisfactory? (y/N): ") == "y"
         cv2.destroyAllWindows()
 
-        # CHECK: Resizing here is concerning. Theres gotta be a better way around this
-        if satisfied:
-            final_img = cv2.resize(
-                cropped_n_rotated_img,
-                (src_height, src_width),
-                interpolation=cv2.INTER_LINEAR,
-            )  # CHECK: not sure if we want to interpolate on given data but a shape must be achieved
-            print(f"Final image is of shape {final_img.shape}")
-            ignore_spot = Circle(ignore_circle_coords, ignore_circle_radius)
-            break
+        # if satisfied:
+        #     final_img = cv2.resize(
+        #         cropped_n_rotated_img,
+        #         (src_height, src_width),
+        #         interpolation=cv2.INTER_LINEAR,
+        #     )  # CHECK: not sure if we want to interpolate on given data but a shape must be achieved
+        #     print(f"Final image is of shape {final_img.shape}")
+        #     ignore_spot = Circle(ignore_circle_coords, ignore_circle_radius)
+        #     break
 
     # Interpolate cropped image to ensure it is (src_height, src_width, src_channels)
     return final_img, ignore_spot
@@ -532,9 +531,19 @@ def get_circle_ofinterest(
 def thickness_to_hyper_coords(
     x: Union[np.ndarray, int],
     y: Union[np.ndarray, np.ndarray],  # , img_height, img_width
+    hyperimg_size: int,
+    trgimg_size: int,
 ) -> Point:
     """
     function you may fill with a mapping of:
         (u,v) coordinates in wafer space to (x,y) coordinates in pixel space
     """
-    return Point(int(x * (483 / 150) + 515), int(y * (483 / 150) + 518))
+    half_hypsize = hyperimg_size // 2
+    half_trgsize = trgimg_size // 2
+    return Point(
+        int(x * (half_hypsize / half_trgsize) + half_hypsize),
+        int(y * (half_hypsize / half_trgsize) + half_hypsize),
+    )
+
+    # Legacy stuff I leave for reference:
+    # return Point(int(x * (483 / 150) + 515), int(y * (483 / 150) + 518))

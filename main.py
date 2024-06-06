@@ -74,8 +74,13 @@ def arguments():
     ap.add_argument("--image_height", default=1280, help="Hyperspectral image height.")
     ap.add_argument("--image_width", default=1024, help="Hyperspectral image width")
     ap.add_argument(
+        "--target_image_size",
+        default=150 * 2,
+        help="Size of the image containing target information (Used for normalization).",
+    )
+    ap.add_argument(
         "--feature_angle",
-        default=pi/2,
+        default=pi / 2,
         help="How we want the feature to be oriented on all data points.",
     )
     ap.add_argument(
@@ -189,6 +194,7 @@ if __name__ == "__main__":
         args.image_height,
         args.image_channels,
         args.feature_angle,
+        args.target_image_size,
     )
 
     logger.info("Finished Preprocessing")
@@ -265,13 +271,12 @@ if __name__ == "__main__":
             val_loss = criterium(y_pred, y).mean()
             val_losses.append(sqrt(val_loss.item()))
             # Calculate R^2
-            ss_res = torch.sum((y - y_pred) ** 2) 
+            ss_res = torch.sum((y - y_pred) ** 2)
             ss_tot = torch.sum((y - torch.mean(y)) ** 2)
             rsqrd = 1 - ss_res / ss_tot
-            
+
             logger.info(f"val_loss {sqrt(val_loss.item())}")
             logger.info(f"R^2  {rsqrd.item()}")
-            
 
     # Show Train-Test Performance
     # logger.info(f"Train Losses: {train_losses}")
@@ -285,15 +290,13 @@ if __name__ == "__main__":
     plt.xlabel("Training Epochs")
     plt.show()
 
-    model_path = os.path.join(args.model_path,f"{args.model_name}.pth")
+    model_path = os.path.join(args.model_path, f"{args.model_name}.pth")
     decision = input(f"Would you like to save this model (to {model_path})? (y/N): ")
     if decision.lower() == "y":
         os.makedirs(args.model_path, exist_ok=True)
-        metadata_path = os.path.join(args.model_path,f"{args.model_name}.metadata")
+        metadata_path = os.path.join(args.model_path, f"{args.model_name}.metadata")
         torch.save(model.state_dict(), model_path)
         logger.info(f"Model saved at {model_path}")
         model_dict_str = str(model)
         with open(metadata_path, "w") as f:
             f.write(model_dict_str)
-
-

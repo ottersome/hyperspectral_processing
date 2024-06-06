@@ -36,16 +36,22 @@ def nchannel_img_to_array(
 
 
 def combine_srctarg_into_sample(
-    src_img: np.ndarray, target: pd.DataFrame, ignore_spot: Circle
+    src_img: np.ndarray, target: pd.DataFrame, ignore_spot: Circle, tgtimg_size: int
 ) -> List[tuple]:
     """
-    Will look at target and find corresponding elements in source to keep
+    Will look at target and find corresponding feature elements to pair it with
     """
+    assert (
+        src_img.shape[0] == src_img.shape[1]
+    ), f"Expecting square image, instead we got {src_img.shape}"
+
+    hypimg_size = src_img.shape[0]
+
     new_rows = []
     for _, row in target.iterrows():
         x, y = row[["X", "Y"]]
         t = row["SiOTHK___"]
-        hyper_point = thickness_to_hyper_coords(x, y)
+        hyper_point = thickness_to_hyper_coords(x, y, hypimg_size, tgtimg_size)
         # Convert image into array
         if in_circle(hyper_point, ignore_spot):
             print("Found target on blindspot")
@@ -75,6 +81,7 @@ def preprocess_data(
     source_height: int,
     source_channels: int,
     feature_angle: float,
+    trgimg_size: int,
 ):
     """
     Will check if there is any data that I have to work out:
@@ -129,7 +136,7 @@ def preprocess_data(
             print(f"Standard source shape {standard_source.shape}")
             print(f"Targe_rowsshape {target_rows.shape}")
             final_rows = combine_srctarg_into_sample(
-                standard_source, target_rows, ignore_spot
+                standard_source, target_rows, ignore_spot, trgimg_size
             )
 
             pd.DataFrame(final_rows, columns=columns).to_parquet(
