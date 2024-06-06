@@ -13,7 +13,7 @@ from torch.autograd import set_detect_anomaly  # type: ignore
 from tqdm import tqdm
 
 from hyptraining.datap.data import preprocess_data
-from hyptraining.utils.utils import create_logger, unused
+from hyptraining.utils.utils import create_logger, unused, compare_picture
 
 
 # Create Enum for filetype

@@ -385,11 +385,11 @@ def get_standard_source(
         #     final_img = cv2.resize(
         #         cropped_n_rotated_img,
         #         (src_height, src_width),
-        #         interpolation=cv2.INTER_LINEAR,
-        #     )  # CHECK: not sure if we want to interpolate on given data but a shape must be achieved
-        #     print(f"Final image is of shape {final_img.shape}")
-        #     ignore_spot = Circle(ignore_circle_coords, ignore_circle_radius)
-        #     break
+    #         interpolation=cv2.INTER_LINEAR,
+    #     )  # CHECK: not sure if we want to interpolate on given data but a shape must be achieved
+    #     print(f"Final image is of shape {final_img.shape}")
+    #     ignore_spot = Circle(ignore_circle_coords, ignore_circle_radius)
+    #     break
 
     # Interpolate cropped image to ensure it is (src_height, src_width, src_channels)
     return final_img, ignore_spot

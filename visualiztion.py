@@ -1,20 +1,36 @@
 import pandas as pd
 from argparse import ArgumentParser
 import torch
-from typing import Tuple 
+from typing import Tuple
 import numpy as np
 import cv2
 from hyptraining.utils.utils import Point
-from hyptraining.datap.processing import (Circle, dataframe_to_tensor, find_circle, resize_image_to_screen, prompt_for_surrounding_points)
+from hyptraining.datap.processing import (
+    Circle,
+    hypdataframe_to_tensor,
+    find_circle,
+    resize_image_to_screen,
+    prompt_for_surrounding_points,
+)
+
 
 def get_arguments():
     ap = ArgumentParser()
-    ap.add_argument("--model_path", default="./model/weights.pth",  help="Pretrained model location to use for visualization")
-    ap.add_argument("--target_img", default="./trgt_imgs/img.parquet",  help="Location of image to use for visualization.")
+    ap.add_argument(
+        "--model_path",
+        default="./model/weights.pth",
+        help="Pretrained model location to use for visualization",
+    )
+    ap.add_argument(
+        "--target_img",
+        default="./trgt_imgs/img.parquet",
+        help="Location of image to use for visualization.",
+    )
     ap.add_argument("--image_height", default=1280, help="Hyperspectral image height.")
     ap.add_argument("--image_width", default=1024, help="Hyperspectral image width")
 
     return ap.parse_args()
+
 
 def get_img_of_interest(img: np.ndarray) -> Tuple[np.ndarray, Circle]:
 
@@ -42,17 +58,17 @@ def get_img_of_interest(img: np.ndarray) -> Tuple[np.ndarray, Circle]:
         circle_of_interest_radius_visual * (1 / scaling_factor)
     )
 
-    # 
-    return 
+    #
+    return
 
 
 if __name__ == "__main__":
     args = get_arguments()
-    # Load the model 
+    # Load the model
     model = torch.load(args.model_path)
-    # Load image 
+    # Load image
     df = pd.read_parquet(args.target_img)
-    img = dataframe_to_tensor(df, args.image_height, args.image_width)
+    img = hypdataframe_to_tensor(df, args.image_height, args.image_width)
 
     # Select area of interest
     # Find Area of Interest

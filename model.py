@@ -9,23 +9,22 @@ class Model(nn.Module):
         super(Model, self).__init__()
 
         layers = [
-            nn.Linear(input_size,input_size*2),
+            nn.Linear(input_size, input_size * 2),
             nn.ReLU(),
-            nn.Linear(input_size*2,input_size*4),
+            nn.Linear(input_size * 2, input_size * 4),
             nn.ReLU(),
-            nn.Linear(input_size*4,input_size*2),
+            nn.Linear(input_size * 4, input_size * 2),
             nn.ReLU(),
-            nn.Linear(input_size*2,input_size*1),
+            nn.Linear(input_size * 2, input_size * 1),
             nn.ReLU(),
-            nn.Linear(input_size,1)
-            
-            ]
+            nn.Linear(input_size, output_size),
+            nn.ReLU(),
+        ]
         # for i in range(self.LAYERS):
         #     layers.append(nn.Linear(input_size // (2**i), input_size // (2 ** (i + 1))))
         #     layers.append(nn.ReLU())
-        
 
-        #layers.append(nn.Linear(input_size // (2**self.LAYERS), output_size))
+        # layers.append(nn.Linear(input_size // (2**self.LAYERS), output_size))
         self.seq = nn.Sequential(*layers)
 
     def forward(self, x):
