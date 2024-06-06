@@ -122,7 +122,6 @@ def preprocess_data(
                 template_loc=template_loc,
                 src_width=source_width,
                 src_height=source_height,
-                src_channels=source_channels,
                 feature_angle=feature_angle,
             )
 

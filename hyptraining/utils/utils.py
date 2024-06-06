@@ -1,6 +1,8 @@
 import logging
 import os
 from collections import namedtuple
+import cv2
+import numpy as np
 
 Point = namedtuple("Point", ["x", "y"])
 
@@ -30,3 +32,39 @@ def unused(func):
         raise Exception(f"{func.__name__} is no longer in use")
 
     return wrapper
+
+
+def compare_picture(estimation: np.ndarray, ground_truth: np.ndarray):
+    """
+    Will plot both images for comparison
+    """
+    import matplotlib.pyplot as plt
+
+    fig, axs = plt.subplots(1, 2, figsize=(15, 10))
+    fig.tight_layout()
+    axs[0].imshow(estimation)
+    axs[1].imshow(ground_truth)
+    plt.show()
+    return
+
+
+def draw_point_in_image(image: np.ndarray, point: Point):
+    """
+    Generally used for debugging the program.
+    Will show the image at hand with a red dot at the point passed
+    """
+    if image.shape[2] > 3 or image.shape[2] == 2:
+        image = image.mean(axis=-1)
+        image = np.stack((image,) * 3, axis=-1)
+    elif image.shape[2] == 1:
+        image = image.mean(axis=-1)
+
+    image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    cv2.circle(image, (point.x, point.y), 4, (0, 0, 255), -1)
+    # Show it it
+    cv2.imshow("Image", image)
+    # Wait for "q" to be pressed
+    key = cv2.waitKey(0)
+    while key & 0xFF != ord("q"):
+        key = cv2.waitKey(0)
+    cv2.destroyAllWindows()

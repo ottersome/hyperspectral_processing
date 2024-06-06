@@ -348,7 +348,6 @@ def get_standard_source(
     template_loc: str,
     src_width: int,
     src_height: int,
-    src_channels: int,
     feature_angle: float,  # Should be radians
 ) -> Tuple[np.ndarray, Circle]:
     # Template Image:
@@ -361,8 +360,6 @@ def get_standard_source(
 
     satisfied = False
     while not satisfied:
-        # Prompt for points of interest
-        # gray_img = np.mean(img, axis=-1) if img.shape[2] > 1 else img  # READ
 
         cropped_n_rotated_img = get_circle_ofinterest(
             img, template_img, src_width, src_height, feature_angle
