@@ -374,7 +374,8 @@ def get_standard_source(
         cv2.imshow("image", visual_img)
         cv2.waitKey(1)
 
-        satisfied = input("Is the image satisfactory? (y/N): ") == "y"
+        # satisfied = input("Is the image satisfactory? (y/N): ") == "y"
+        satisfied = True  # TOREM: debug
         cv2.destroyAllWindows()
 
         final_img = cropped_n_rotated_img
