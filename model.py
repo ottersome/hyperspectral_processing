@@ -9,9 +9,7 @@ class Model(nn.Module):
         super(Model, self).__init__()
 
         layers = [
-            nn.Linear(input_size, input_size * 2),
-            nn.ReLU(),
-            nn.Linear(input_size * 2, input_size * 4),
+            nn.Linear(input_size, input_size * 4),
             nn.ReLU(),
             nn.Linear(input_size * 4, input_size * 2),
             nn.ReLU(),

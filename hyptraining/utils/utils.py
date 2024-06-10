@@ -26,6 +26,37 @@ def create_logger(name: str):
     return logger
 
 
+def dump_2dimg_to_log(array: np.ndarray, array_name: str, file: str):
+    with open(file, "w+") as f:
+        f.write(f"Start dump of {array_name}--------------------\n")
+        for i in range(array.shape[0]):
+            for j in range(array.shape[1]):
+                f.write(f"{array[i,j]:.2f}, ")
+            f.write("\n")
+        f.write(f"End dump of {array_name}-------------------\n")
+
+
+def dump_3dimg_to_log(array: np.ndarray, array_name: str, file: str):
+    with open(file, "w+") as f:
+        f.write(f"Start dump of {array_name}--------------------\n")
+        for i in range(array.shape[0]):
+            for j in range(array.shape[1]):
+                f.write("( ")
+                for k in range(array.shape[2]):
+                    f.write(f"{array[i,j,k]:.2f}, ")
+                f.write(" )")
+            f.write("\n")
+        f.write(f"End dump of {array_name}-------------------\n")
+
+
+def normalize_3d_image(tensor: np.ndarray):
+    for i in range(tensor.shape[2]):
+        tensor[:, :, i] = cv2.normalize(
+            tensor[:, :, i], None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+        )
+    return tensor
+
+
 # Make a decorator called `unused` this will wrap a function and raise an exception whenver its caled because its being faded out of development
 def unused(func):
     def wrapper(*args, **kwargs):

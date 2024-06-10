@@ -211,7 +211,7 @@ if __name__ == "__main__":
     logger.info("Model Structure looks like:")
     logger.info(model)
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=0.001, weight_decay=args.weight_decay
+        model.parameters(), lr=0.0001, weight_decay=args.weight_decay
     )
     criterium = torch.nn.MSELoss()
     # TODO: scheduler  = ... (if necessary)
@@ -244,7 +244,6 @@ if __name__ == "__main__":
         ## Training
         model.train()
         for b in range(num_train_batches):
-            optimizer.zero_grad()
             batch = torch.Tensor(
                 ds_train[b * args.batch_size : (b + 1) * args.batch_size]
             )
@@ -254,6 +253,7 @@ if __name__ == "__main__":
             # Train
             y_pred = model(x).squeeze()
             loss = criterium(y_pred, y).mean()
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             batch_losses.append(sqrt(loss.item()))
@@ -268,6 +268,9 @@ if __name__ == "__main__":
             y = val_batch[:, 0]
 
             y_pred = model(x).squeeze()
+            meep = y_pred.detach().numpy()
+            meeo = list(zip(meep[:5], y.numpy()[:5]))
+            logger.debug(f"Eval Predictions vs ground-truth:\n {meeo} ")
             val_loss = criterium(y_pred, y).mean()
             val_losses.append(sqrt(val_loss.item()))
             # Calculate R^2

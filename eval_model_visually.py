@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import argparse
 import numpy as np
 from numpy import pi
+from typing import Any
 import matplotlib.pyplot as plt
 from torch import nn
 from scipy.interpolate import Rbf
@@ -47,7 +48,7 @@ def get_args():
     return ap.parse_args()
 
 
-def single_image_view(
+def image_inference(
     model: nn.Module,
     image_path: str,
     template_loc: str,
@@ -85,7 +86,7 @@ def single_image_view(
     # distances = np.sqrt(vert_ellip_term**2 + hori_ellip_term**2)
 
     mask = (vert_ellip_term**2 + hori_ellip_term**2) <= 1
-    inference_img[~mask] = 0
+    inference_img[~mask] = np.nan
 
     return inference_img
 
@@ -128,6 +129,13 @@ def rbf_interpolation(x: np.ndarray, y: np.ndarray, values, img_size: Point):
     return ZI, sparse_groundtruth
 
 
+def raw_dump(obj: Any, array_name: str, file: str):
+    with open(file, "w+") as f:
+        f.write(f"Start dump of {array_name}--------------------\n")
+        f.write(obj)
+        f.write(f"End dump of {array_name}-------------------\n")
+
+
 if __name__ == "__main__":
     # Load Arguments
     args = get_args()
@@ -135,7 +143,7 @@ if __name__ == "__main__":
 
     logger.info(f"Importing model {args.model_path}")
     model = Model(args.image_channels, 1)
-    model.state_dict = torch.load(args.model_path)
+    model.load_state_dict(torch.load(args.model_path))
     model.eval()
 
     # Crate Interpolation of target image for visuals
@@ -150,7 +158,7 @@ if __name__ == "__main__":
     )
 
     # Just work with single image for now
-    predicted_image = single_image_view(
+    predicted_image = image_inference(
         model,
         args.image_path,
         args.template_location,
@@ -160,7 +168,7 @@ if __name__ == "__main__":
     )
 
     # For the sake of uniform vmap
-    imgs = [interpolated_approx, sparse_groundtruth, predicted_image]
+    imgs = [interpolated_approx, sparse_groundtruth]
     gmin = min([np.nanmin(i) for i in imgs])
     gmax = max([np.nanmax(i) for i in imgs])
 
@@ -181,9 +189,10 @@ if __name__ == "__main__":
     im1 = axs[2].imshow(predicted_image, vmin=gmin, vmax=gmax)
     axs[2].set_title("ML-Inferred Values")
 
+    # dump_to_log(predicted_image, "predicted_image", "predicted_image.log")
     fig.colorbar(im0, ax=axs, orientation="vertical", label="Thickness", shrink=0.5)
 
-    for i in range(len(axs)):
-        axs[i].set_ylim(100, 200)
-        axs[i].set_xlim(0, 200)
+    # for i in range(len(axs)):
+    #     axs[i].set_ylim(100, 200)
+    #     axs[i].set_xlim(0, 200)
     plt.show()
