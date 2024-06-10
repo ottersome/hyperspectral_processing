@@ -13,7 +13,7 @@ from torch.autograd import set_detect_anomaly  # type: ignore
 from tqdm import tqdm
 
 from hyptraining.datap.data import preprocess_data
-from hyptraining.utils.utils import create_logger, unused, compare_picture
+from hyptraining.utils.utils import compare_picture, create_logger, unused
 
 
 # Create Enum for filetype
@@ -31,7 +31,7 @@ from image_processing import (
     find_distinctive_feature_coords,
     get_final_image,
 )
-from model import Model
+from model import Model, SpatialModel
 
 set_detect_anomaly(True)
 
@@ -66,6 +66,12 @@ def arguments():
         "--model_path",
         default="./models",
         help="Where to store trained data",
+    )
+    ap.add_argument(
+        "--kernel_radius",
+        default=2,
+        type=int,
+        help="Radius of kernel used for spatial methods.",
     )
 
     ap.add_argument(
@@ -195,6 +201,7 @@ if __name__ == "__main__":
         args.image_channels,
         args.feature_angle,
         args.target_image_size,
+        args.kernel_radius,
     )
 
     logger.info("Finished Preprocessing")
@@ -207,14 +214,19 @@ if __name__ == "__main__":
     logger.info("Dataset loaded")
     # Sample Uniformly
     # Create model-related objects
-    model = Model(args.image_channels, 1)
+    if args.kernel_radius > 0:
+        model = SpatialModel(args.kernel_radius, args.image_channels, output_size=1)
+    else:
+        model = Model(args.image_channels, 1)
+
     logger.info("Model Structure looks like:")
     logger.info(model)
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=0.0001, weight_decay=args.weight_decay
+        model.parameters(),
+        lr=0.001,  # weight_decay=args.weight_decay
     )
     criterium = torch.nn.MSELoss()
-    # TODO: scheduler  = ... (if necessary)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
 
     # Build X -> Y Dataset
     # dataset = build_learning_ds(ds_a, ds_b, args.image_height, args.image_width)
@@ -249,6 +261,11 @@ if __name__ == "__main__":
             )
             y = batch[:, 0]
             x = batch[:, 1:]
+            batch_size = batch.shape[0]
+            if args.kernel_radius > 0:
+                kernel_size = args.kernel_radius * 2 + 1
+                x = x.reshape(batch_size, kernel_size, kernel_size, args.image_channels)
+                x = x.permute(0, 3, 1, 2)
 
             # Train
             y_pred = model(x).squeeze()
@@ -259,6 +276,7 @@ if __name__ == "__main__":
             batch_losses.append(sqrt(loss.item()))
 
         train_losses.append(sum(batch_losses) / len(batch_losses))
+        scheduler.step()
 
         ## Validation
         model.eval()
@@ -266,6 +284,12 @@ if __name__ == "__main__":
             val_batch = torch.Tensor(ds_val)
             x = val_batch[:, 1:]
             y = val_batch[:, 0]
+
+            batch_size = val_batch.shape[0]
+            if args.kernel_radius > 0:
+                kernel_size = args.kernel_radius * 2 + 1
+                x = x.reshape(batch_size, kernel_size, kernel_size, args.image_channels)
+                x = x.permute(0, 3, 1, 2)
 
             y_pred = model(x).squeeze()
             meep = y_pred.detach().numpy()

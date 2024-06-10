@@ -134,6 +134,7 @@ def preprocess_data(
     source_channels: int,
     feature_angle: float,
     trgimg_size: int,
+    kernel_radius: int,
 ):
     """
     Will check if there is any data that I have to work out:
@@ -145,9 +146,8 @@ def preprocess_data(
     ), "Raw data dir does not exists"
 
     # Replace the extension with npy (could be any in a range of extensions)
-    columns = ["X", "Y", "I", "J", "Thickness"] + [
-        f"C{i}" for i in range(source_channels)
-    ]
+    num_columns = ((kernel_radius * 2 + 1) ** 2) * source_channels
+    columns = ["X", "Y", "I", "J", "Thickness"] + [f"C{i}" for i in range(num_columns)]
 
     # Ensure it exists
     Path(cached_dir).mkdir(parents=True, exist_ok=True)
@@ -188,7 +188,7 @@ def preprocess_data(
             print(f"Standard source shape {standard_source.shape}")
             print(f"Targe_rowsshape {target_rows.shape}")
             final_rows = combine_srctarg_into_sample(
-                standard_source, target_rows, ignore_spot, trgimg_size, kernel_radius=0
+                standard_source, target_rows, ignore_spot, trgimg_size, kernel_radius
             )
 
             pd.DataFrame(final_rows, columns=columns).to_parquet(
