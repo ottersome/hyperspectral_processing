@@ -35,8 +35,60 @@ def nchannel_img_to_array(
     return dataframe
 
 
+def get_roi_around_point(
+    point_of_interest: Point,
+    kernel_radius: int,
+    image: np.ndarray,
+    ignore_spot: Circle,
+):
+    assert len(image.shape) >= 2, "Image needs to be of at least 2d"
+    # Get the the extremes
+    poi = point_of_interest
+
+    y_rawmin = poi.y - kernel_radius
+    y_rawmax = poi.y + kernel_radius
+    x_rawmin = poi.x - kernel_radius
+    x_rawmax = poi.x + kernel_radius
+
+    ymin = max(y_rawmin, 0)
+    ymax = min(y_rawmax, image.shape[0] - 1)
+    xmin = max(x_rawmin, 0)
+    xmax = min(x_rawmax, image.shape[1] - 1)
+
+    offset_y_left = ymin - y_rawmin
+    offset_y_right = ymax - ymin + 1
+    offset_x_left = xmin - x_rawmin
+    offset_x_right = xmax - xmin + 1
+
+    # Ensure no blind spots are included
+    yroi, xroi = np.meshgrid(np.arange(ymin, ymax + 1), np.arange(xmin, xmax + 1))
+    distances = (yroi - ignore_spot.center.y) ** 2 + (xroi - ignore_spot.center.x) ** 2
+    mask = distances > ignore_spot.radius**2
+    mask = mask.astype(int)
+    # OPTIM: Check if we can broadcast this
+    mask = np.stack((mask,) * image.shape[2], axis=2)
+    DATA_LOGGER.debug(f"Long mask looks like \n{mask}")
+
+    # Do the actual selection
+    return_kernel = np.zeros(
+        (kernel_radius * 2 + 1, kernel_radius * 2 + 1, image.shape[2])
+    )
+    unmasked_selection = image[ymin : ymax + 1, xmin : xmax + 1, :]
+    DATA_LOGGER.debug(f"Unmasked selection : {unmasked_selection}")
+    return_kernel[offset_y_left:offset_y_right, offset_x_left:offset_x_right, :] = (
+        unmasked_selection * mask
+    )
+    DATA_LOGGER.debug(f"The returned kernel looks like: {return_kernel.flatten()}")
+
+    return return_kernel
+
+
 def combine_srctarg_into_sample(
-    src_img: np.ndarray, target: pd.DataFrame, ignore_spot: Circle, tgtimg_size: int
+    src_img: np.ndarray,
+    target: pd.DataFrame,
+    ignore_spot: Circle,
+    tgtimg_size: int,
+    kernel_radius: int,
 ) -> List[tuple]:
     """
     Will look at target and find corresponding feature elements to pair it with
@@ -52,13 +104,13 @@ def combine_srctarg_into_sample(
         x, y = row[["X", "Y"]]
         t = row["SiOTHK___"]
         hyper_point = thickness_to_hyper_coords(x, y, hypimg_size, tgtimg_size)
-        # Convert image into array
-        if in_circle(hyper_point, ignore_spot):
-            print("Found target on blindspot")
-            continue  # Just dont use it
+        hyper_kernel = get_roi_around_point(
+            hyper_point, kernel_radius, src_img, ignore_spot
+        )
 
         # Source
-        ij_features = src_img[hyper_point.x, hyper_point.y, :]
+        # ij_features = src_img[hyper_point.x, hyper_point.y, :]
+        ij_features = hyper_kernel.ravel()
 
         debugging_feetures = [
             x,
@@ -136,7 +188,7 @@ def preprocess_data(
             print(f"Standard source shape {standard_source.shape}")
             print(f"Targe_rowsshape {target_rows.shape}")
             final_rows = combine_srctarg_into_sample(
-                standard_source, target_rows, ignore_spot, trgimg_size
+                standard_source, target_rows, ignore_spot, trgimg_size, kernel_radius=0
             )
 
             pd.DataFrame(final_rows, columns=columns).to_parquet(
