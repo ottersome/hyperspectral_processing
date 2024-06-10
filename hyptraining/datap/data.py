@@ -2,14 +2,19 @@ import os
 from pathlib import Path
 from typing import List, Union
 
+import cv2
+import math
 import numpy as np
+import matplotlib.pyplot as plt
 import pandas as pd
 
-from ..utils.utils import Point, create_logger
+from ..utils.utils import Point, create_logger, dump_3dimg_to_log, normalize_3d_image
 from .processing import Circle, get_standard_source, thickness_to_hyper_coords
 
 file_path = os.path.basename(__file__)
 DATA_LOGGER = create_logger(file_path)
+
+logger = create_logger(os.path.basename(__file__))
 
 
 def in_circle(point: Point, circle: Circle) -> bool:
@@ -35,6 +40,28 @@ def nchannel_img_to_array(
     return dataframe
 
 
+def target_to_full_img(target: pd.DataFrame, size):
+    # Normalize target
+    x = target.iloc[:, 0].values
+    y = target.iloc[:, 1].values
+    z = target.iloc[:, 2].values
+
+    x_tmin, x_tmax = (-150, 150)
+    y_tmin, y_tmax = (-150, 150)
+
+    xs = np.clip(((x - x_tmin) / (x_tmax - x_tmin) * size).astype(int), 0, size - 1)
+    ys = np.clip(((y - y_tmin) / (y_tmax - y_tmin) * size).astype(int), 0, size - 1)
+
+    logger.debug(f"xs are {xs}")
+    logger.debug(f"ys are {ys}")
+
+    sparse_array = np.full((size, size, 3), (0, 0, 0))
+    sparse_array[ys, xs, :] = (0, 0, 255)
+    dump_3dimg_to_log(sparse_array, "sparse_array", "sparse_array.log")
+
+    return sparse_array, (ys, xs)
+
+
 def combine_srctarg_into_sample(
     src_img: np.ndarray, target: pd.DataFrame, ignore_spot: Circle, tgtimg_size: int
 ) -> List[tuple]:
@@ -48,10 +75,47 @@ def combine_srctarg_into_sample(
     hypimg_size = src_img.shape[0]
 
     new_rows = []
+    size = 300
+    target_img, tidxs = target_to_full_img(target, size)
+    fig, axs = plt.subplots(1, 2, figsize=(5, 10))
+    vis_img = np.stack((src_img[:, :, 60],) * 3, axis=-1)
+    vis_img = cv2.normalize(vis_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    im0 = axs[0].imshow(vis_img)
+    im1 = axs[1].imshow(target_img)
+    plt.ion()  # Turn on interactive mode
+
+    x_tmin, x_tmax = (-150, 150)
+    y_tmin, y_tmax = (-150, 150)
+
     for _, row in target.iterrows():
         x, y = row[["X", "Y"]]
         t = row["SiOTHK___"]
+        logger.info(f"Ray y,x from target: {y},{x}")
+        xs = (
+            np.clip((np.array([x]) - x_tmin) / (x_tmax - x_tmin) * size, 0, size - 1)
+            .astype(int)
+            .item()
+        )
+        ys = (
+            np.clip((np.array([y]) - y_tmin) / (y_tmax - y_tmin) * size, 0, size - 1)
+            .astype(int)
+            .item()
+        )
+        # xs = math.floor((x - x_tmin) / (x_tmax - x_tmin) * size)
+        # ys = math.floor((y - y_tmin) / (y_tmax - y_tmin) * size)
+        # target_img[tidxs[0], tidxs[1], :] = (0, 0, 255)
+        logger.info(f"At x,y {xs},{ys}")
+        target_img[ys, xs, :] = (0, 255, 0)
+
         hyper_point = thickness_to_hyper_coords(x, y, hypimg_size, tgtimg_size)
+        vis_img[hyper_point.y, hyper_point.x] = (255, 0, 0)
+        # Refresh plot
+        # fig, axs = plt.subplots(1, 2, figsize=(5, 10))
+        im0.set_data(vis_img)  # Update the image data
+        im1.set_data(target_img)  # Update the image data
+        plt.draw()
+        plt.pause(0.06)
+
         # Convert image into array
         if in_circle(hyper_point, ignore_spot):
             print("Found target on blindspot")
@@ -69,6 +133,8 @@ def combine_srctarg_into_sample(
         new_tuple = debugging_feetures + [t] + ij_features.tolist()
         new_rows.append(new_tuple)
         # TODO: maybe add more stuff to the row
+    plt.ioff()
+    plt.show()
 
     return new_rows
 
