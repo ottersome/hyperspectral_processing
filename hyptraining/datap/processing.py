@@ -458,9 +458,18 @@ def get_circle_ofinterest(
         cropped_img_true = cropImage(
             img, circle_of_interest_coords_true, circle_of_interest_radius_true
         )
-        print("Automatically finding the features for alignment.")
-
+        # For later visualization
+        cropped_visual = np.stack((cropped_img_true[:, :, 60].copy(),) * 3, axis=-1)
+        cropped_visual = cv2.normalize(  # type: ignore
+            cropped_visual,
+            None,
+            0,
+            255,
+            cv2.NORM_MINMAX,
+            dtype=cv2.CV_8U,  # type : ignore
+        )
         # Feature of interest
+        print("Automatically finding the features for alignment.")
         feature_of_interest = find_distinctive_feature_coords(
             cropped_img_true[:, :, 60], template_img
         )
@@ -471,22 +480,17 @@ def get_circle_ofinterest(
         rotated_img = rotate_according_to_feature(
             cropped_img_true, feature_of_interest, feature_angle
         )
-        cropped_visual = np.stack((cropped_img_true[:, :, 60].copy(),) * 3, axis=-1)
-        cropped_visual = cv2.normalize(  # type: ignore
-            cropped_visual,
+        visual_rotdimg = np.stack((rotated_img[:, :, 60].copy(),) * 3, axis=-1)
+        visual_rotdimg = cv2.normalize(  # type: ignore
+            visual_rotdimg,
             None,
             0,
             255,
             cv2.NORM_MINMAX,
             dtype=cv2.CV_8U,  # type : ignore
         )
-        visual_img = np.stack((rotated_img[:, :, 60].copy(),) * 3, axis=-1)
-        visual_img = cv2.normalize(  # type: ignore
-            visual_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U  # type : ignore
-        )
-        # Prompt user for corrections
-        # Show original and rotated for comparison
-        two_images = np.concatenate((cropped_visual, visual_img), axis=1)
+        # Prompt user for corrections(Show two images)
+        two_images = np.concatenate((cropped_visual, visual_rotdimg), axis=1)
         print(f"Channels of concatenated images {two_images.shape}")
         font = cv2.FONT_HERSHEY_SIMPLEX
         cv2.putText(
@@ -495,7 +499,7 @@ def get_circle_ofinterest(
         cv2.putText(
             two_images,
             "After Rotation",
-            (10 + visual_img.shape[1], 30),
+            (10 + visual_rotdimg.shape[1], 30),
             font,
             1,
             (255, 255, 255),
@@ -518,9 +522,9 @@ def get_circle_ofinterest(
             decision = int(decision)
             print(f"Rotating {90*decision} degrees...")
             rotated_img = fix_rotation(decision, cropped_img_true)
-            visual_img = np.stack((rotated_img[:, :, 60].copy(),) * 3, axis=-1)
-            visual_img = cv2.normalize(  # type: ignore
-                visual_img,
+            visual_rotdimg = np.stack((rotated_img[:, :, 60].copy(),) * 3, axis=-1)
+            visual_rotdimg = cv2.normalize(  # type: ignore
+                visual_rotdimg,
                 None,
                 0,
                 255,
