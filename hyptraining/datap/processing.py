@@ -8,8 +8,7 @@ import numpy as np
 import pandas as pd
 from screeninfo import get_monitors
 
-
-from ..utils.utils import create_logger, Point
+from ..utils.utils import Point, create_logger
 
 
 @dataclass
@@ -295,7 +294,7 @@ def store_all_channels(img: np.ndarray):
 
 
 def fix_rotation(choice: int, img: np.ndarray) -> np.ndarray:
-    assert choice in [1, 2, 3], "Choice must be 1, 2 or 3"
+    assert choice in [0, 1, 2, 3], "Choice must be 1, 2 or 3"
     center = Point(img.shape[1] // 2, img.shape[0] // 2)
     fix_rotation_matrix = cv2.getRotationMatrix2D(center, 90 * choice, 1)
     final_image = cv2.warpAffine(img, fix_rotation_matrix, (img.shape[0], img.shape[1]))
@@ -509,6 +508,7 @@ def get_circle_ofinterest(
         cv2.imshow("image", two_images)
         print(
             "Cropping and feature finding has been executed. Please select:\n"
+            "0) Keep as default (0 degrees)\n"
             "1) Rotate the image 90 degrees\n"
             "2) Rotate the image 180 degrees\n"
             "3) Rotate the image 270 degrees\n"
@@ -518,7 +518,7 @@ def get_circle_ofinterest(
         decision = input("Your choice (and Enter): ")
         cv2.destroyAllWindows()
         satisfied = True
-        if decision in ["1", "2", "3"]:
+        if decision in ["0", "1", "2", "3"]:
             decision = int(decision)
             print(f"Rotating {90*decision} degrees...")
             rotated_img = fix_rotation(decision, cropped_img_true)
