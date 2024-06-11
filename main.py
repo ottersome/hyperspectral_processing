@@ -226,7 +226,7 @@ if __name__ == "__main__":
         lr=0.001,  # weight_decay=args.weight_decay
     )
     criterium = torch.nn.MSELoss()
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.1)
 
     # Build X -> Y Dataset
     # dataset = build_learning_ds(ds_a, ds_b, args.image_height, args.image_width)

@@ -44,6 +44,7 @@ def get_roi_around_point(
     assert len(image.shape) >= 2, "Image needs to be of at least 2d"
     # Get the the extremes
     poi = point_of_interest
+    # DATA_LOGGER.debug(f"Point of interest is \n{point_of_interest}")
 
     y_rawmin = poi.y - kernel_radius
     y_rawmax = poi.y + kernel_radius
@@ -56,29 +57,37 @@ def get_roi_around_point(
     xmax = min(x_rawmax, image.shape[1] - 1)
 
     offset_y_left = ymin - y_rawmin
-    offset_y_right = ymax - ymin + 1
+    # offset_y_right = offset_y_left + (ymax - ymin + 1)
     offset_x_left = xmin - x_rawmin
-    offset_x_right = xmax - xmin + 1
+    # offset_x_right = offset_x_left + (xmax - xmin + 1)
+    offset_x_right = xmax - x_rawmax
+    offset_y_right = ymax - y_rawmax
+    offset_x_right = None if offset_x_right == 0 else offset_x_right
+    offset_y_right = None if offset_y_right == 0 else offset_y_right
 
+    # DATA_LOGGER.debug(f"Offset y values  left: {offset_y_left} right: {offset_y_right}")
+    # DATA_LOGGER.debug(f"Offset x values  left: {offset_x_left} right: {offset_x_right}")
     # Ensure no blind spots are included
-    yroi, xroi = np.meshgrid(np.arange(ymin, ymax + 1), np.arange(xmin, xmax + 1))
+    yroi, xroi = np.meshgrid(
+        np.arange(ymin, ymax + 1), np.arange(xmin, xmax + 1), indexing="ij"
+    )
     distances = (yroi - ignore_spot.center.y) ** 2 + (xroi - ignore_spot.center.x) ** 2
     mask = distances > ignore_spot.radius**2
     mask = mask.astype(int)
     # OPTIM: Check if we can broadcast this
     mask = np.stack((mask,) * image.shape[2], axis=2)
-    DATA_LOGGER.debug(f"Long mask looks like \n{mask}")
+    # DATA_LOGGER.debug(f"Long mask looks like \n{mask}")
 
     # Do the actual selection
     return_kernel = np.zeros(
         (kernel_radius * 2 + 1, kernel_radius * 2 + 1, image.shape[2])
     )
     unmasked_selection = image[ymin : ymax + 1, xmin : xmax + 1, :]
-    DATA_LOGGER.debug(f"Unmasked selection : {unmasked_selection}")
+    # DATA_LOGGER.debug(f"Unmasked selection : {unmasked_selection}")
     return_kernel[offset_y_left:offset_y_right, offset_x_left:offset_x_right, :] = (
         unmasked_selection * mask
     )
-    DATA_LOGGER.debug(f"The returned kernel looks like: {return_kernel.flatten()}")
+    # DATA_LOGGER.debug(f"The returned kernel looks like: {return_kernel.flatten()}")
 
     return return_kernel
 
