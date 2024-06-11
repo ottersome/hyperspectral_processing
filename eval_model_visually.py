@@ -1,20 +1,19 @@
-import matplotlib.pyplot as plt
 import argparse
-import numpy as np
-from numpy import pi
-from tqdm import tqdm
 from typing import Any
+
 import matplotlib.pyplot as plt
-from torch import nn
-from scipy.interpolate import Rbf
-from hyptraining.datap.data import combine_srctarg_into_sample
-from model import Model, SpatialModel
+import numpy as np
 import pandas as pd
 import torch
+from numpy import pi
+from scipy.interpolate import Rbf
+from torch import nn
+from tqdm import tqdm
+
+from hyptraining.datap.data import combine_srctarg_into_sample, get_roi_around_point
 from hyptraining.datap.processing import get_standard_source
 from hyptraining.utils.utils import Point, create_logger
-
-from hyptraining.datap.data import get_roi_around_point
+from model import Model, SpatialModel
 
 
 def get_args():
@@ -103,18 +102,11 @@ def image_inference(
                     model(batch_tensor).detach().numpy()
                 ).flatten()
 
-                vert_ellip_term = (i - finimg_height / 2) / (finimg_height / 2)
-                hori_ellip_term = (j - finimg_width / 2) / (finimg_width / 2)
-                if (vert_ellip_term**2 + hori_ellip_term**2) < 1:
-                    logger.info("Logging")
-                    logger.debug(f"At ({i},{j}): thicknesses: ")
-                    exit()
-
                 bar.set_description(
                     f"Have calculated {len(thicknesses)} thicknesses {thicknesses[gidx - batch_size : gidx]}"
                 )
                 batch.clear()
-                bar.update(batch_size)
+            bar.update(1)
             # TODO: add this back
             # elif gidx == (total_size - 1) and gidx != 0:
             #     batch_tensor = torch.Tensor(batch)
@@ -128,19 +120,19 @@ def image_inference(
             #     batch.clear()
 
     # Once all thicknesses are gathered we reshape it into the image
-    thick_image = np.array(thicknesses).ravel().reshape(finimg_height, finimg_width, 1)
+    # thick_image = np.array(thicknesses).ravel().reshape(finimg_height, finimg_width, 1)
 
     # Crate ellipse mask:
-    yslice, xslice = np.ogrid[:finimg_height, :finimg_width]
-    vert_ellip_term = (yslice - finimg_height / 2) / (finimg_height / 2)
-    hori_ellip_term = (xslice - finimg_width / 2) / (finimg_width / 2)
+    # yslice, xslice = np.ogrid[:finimg_height, :finimg_width]
+    # vert_ellip_term = (yslice - finimg_height / 2) / (finimg_height / 2)
+    # hori_ellip_term = (xslice - finimg_width / 2) / (finimg_width / 2)
+    #
+    # # distances = np.sqrt(vert_ellip_term**2 + hori_ellip_term**2)
+    #
+    # mask = (vert_ellip_term**2 + hori_ellip_term**2) <= 1
+    # thick_image[~mask] = np.nan
 
-    # distances = np.sqrt(vert_ellip_term**2 + hori_ellip_term**2)
-
-    mask = (vert_ellip_term**2 + hori_ellip_term**2) <= 1
-    thick_image[~mask] = np.nan
-
-    return thick_image
+    return thicknesses
 
 
 def rbf_interpolation(x: np.ndarray, y: np.ndarray, values, img_size: Point):

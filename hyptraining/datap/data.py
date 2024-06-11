@@ -85,7 +85,7 @@ def get_roi_around_point(
     unmasked_selection = image[ymin : ymax + 1, xmin : xmax + 1, :]
     # DATA_LOGGER.debug(f"Unmasked selection : {unmasked_selection}")
     return_kernel[offset_y_left:offset_y_right, offset_x_left:offset_x_right, :] = (
-        unmasked_selection * mask
+        unmasked_selection  # * mask
     )
     # DATA_LOGGER.debug(f"The returned kernel looks like: {return_kernel.flatten()}")
 
@@ -252,4 +252,5 @@ def read_csv(csv_path: str, file_t):
     elif "target" in csv_path:
         pass
     else:
+
         raise ValueError("Unknown file type. Neither hyperspec, nor thickness")
