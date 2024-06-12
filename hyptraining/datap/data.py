@@ -73,9 +73,10 @@ def get_roi_around_point(
     )
     distances = (yroi - ignore_spot.center.y) ** 2 + (xroi - ignore_spot.center.x) ** 2
     mask = distances > ignore_spot.radius**2
-    mask = mask.astype(int)
+    fmask = mask.astype(float)
+    fmask[~mask] = np.nan
     # OPTIM: Check if we can broadcast this
-    mask = np.stack((mask,) * image.shape[2], axis=2)
+    fmask = np.stack((fmask,) * image.shape[2], axis=2)
     # DATA_LOGGER.debug(f"Long mask looks like \n{mask}")
 
     # Do the actual selection
@@ -85,7 +86,7 @@ def get_roi_around_point(
     unmasked_selection = image[ymin : ymax + 1, xmin : xmax + 1, :]
     # DATA_LOGGER.debug(f"Unmasked selection : {unmasked_selection}")
     return_kernel[offset_y_left:offset_y_right, offset_x_left:offset_x_right, :] = (
-        unmasked_selection  # * mask
+        unmasked_selection * fmask
     )
     # DATA_LOGGER.debug(f"The returned kernel looks like: {return_kernel.flatten()}")
 
