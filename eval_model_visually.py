@@ -1,16 +1,19 @@
-import matplotlib.pyplot as plt
 import argparse
-import numpy as np
-from numpy import pi
 from typing import Any
+
 import matplotlib.pyplot as plt
-from torch import nn
-from scipy.interpolate import Rbf
-from model import Model
+import numpy as np
 import pandas as pd
 import torch
+from numpy import pi
+from scipy.interpolate import Rbf
+from torch import nn
+from tqdm import tqdm
+
+from hyptraining.datap.data import combine_srctarg_into_sample, get_roi_around_point
 from hyptraining.datap.processing import get_standard_source
 from hyptraining.utils.utils import Point, create_logger
+from model import Model, SpatialModel
 
 
 def get_args():
@@ -34,6 +37,12 @@ def get_args():
         help="Size of the image containing the radius thing",
     )
     ap.add_argument(
+        "--kernel_radius",
+        default=2,
+        type=int,
+        help="Radius of kernel used for spatial methods.",
+    )
+    ap.add_argument(
         "--image_channels", default=120, type=int, help="Size of model's input"
     )
     ap.add_argument(
@@ -55,6 +64,7 @@ def image_inference(
     image_width: int,
     image_height: int,
     desired_angle: float,
+    kernel_radius: int,
 ) -> np.ndarray:
     # Ensure model is in evaluation
     model.eval()
@@ -62,33 +72,66 @@ def image_inference(
     features_parquet = pd.read_parquet(image_path)
 
     # Get the standard source
-    final_img, _ = get_standard_source(
+    final_img, ignore_spot = get_standard_source(
         features_parquet, template_loc, image_width, image_height, desired_angle
     )
-    finimg_height, finimg_width, finimg_chan = final_img.shape
-    logger.info(f"Final image shape {final_img.shape}")
 
-    # Process the features
-    feature_tensor = torch.from_numpy(final_img.reshape(-1, finimg_chan)).to(
-        torch.float32
-    )
-    logger.info(f"Feature tensor is of shape {feature_tensor.shape}")
-    inference = model(feature_tensor)
-    logger.info(f"Inference is of shape {inference.shape}")
-    inference_img = inference.reshape((finimg_height, finimg_width)).detach().numpy()
-    logger.info(f"Reshaped inference is of shape {inference_img.shape}")
+    finimg_height, finimg_width, _ = final_img.shape
+    batch_size = 1024
+
+    batch = []
+    thicknesses = np.zeros(finimg_height * finimg_width)
+    # We go through *all* the pixels here
+    total_size = finimg_width * finimg_height
+    bar = tqdm(total=(total_size), desc="Going through image")
+    for i in range(finimg_height):
+        for j in range(finimg_width):
+            hyper_kernel = get_roi_around_point(
+                Point(j, i), kernel_radius, final_img, ignore_spot
+            )
+            batch.append(hyper_kernel)
+            # Get thickness out of model
+            gidx = i * finimg_width + j
+            if gidx % batch_size == 0:
+                # logger.info(f"Batch is of type {type(batch)} and looks like {batch}")
+                batch_tensor = torch.tensor(np.stack(batch, axis=0)).to(torch.float32)
+                # CHECK:  That permutation is correct
+                batch_tensor = batch_tensor.permute(0, 3, 1, 2)
+                # Add a list to thicknesses
+                # thicknesses += batch_tensor.detach().numpy().tolist()
+                thicknesses[gidx - batch_size : gidx] = (
+                    model(batch_tensor).detach().numpy()
+                ).flatten()
+
+                batch.clear()
+            bar.update(1)
+            # TODO: add this back
+            # elif gidx == (total_size - 1) and gidx != 0:
+            #     batch_tensor = torch.Tensor(batch)
+            #     # thicknesses[gidx : gidx + len(batch)] = model(batch_tensor).detach().numpy().ravel()
+            #     left_over = gidx % batch_size
+            #     thicknesses[gidx - left_over : gidx] = (
+            #         model(batch_tensor).detach().numpy().ravel()
+            #     )
+            #     bar.update(len(batch))
+            #     bar.set_description(f"Have calculated {len(thicknesses)} thicknesses")
+            #     batch.clear()
+
+    # Once all thicknesses are gathered we reshape it into the image
+    # thick_image = np.array(thicknesses).ravel().reshape(finimg_height, finimg_width, 1)
+    thicknesses = thicknesses.reshape(finimg_height, finimg_width)
 
     # Crate ellipse mask:
-    yslice, xslice = np.ogrid[:finimg_height, :finimg_width]
-    vert_ellip_term = (yslice - finimg_height / 2) / (finimg_height / 2)
-    hori_ellip_term = (xslice - finimg_width / 2) / (finimg_width / 2)
+    # yslice, xslice = np.ogrid[:finimg_height, :finimg_width]
+    # vert_ellip_term = (yslice - finimg_height / 2) / (finimg_height / 2)
+    # hori_ellip_term = (xslice - finimg_width / 2) / (finimg_width / 2)
+    #
+    # # distances = np.sqrt(vert_ellip_term**2 + hori_ellip_term**2)
+    #
+    # mask = (vert_ellip_term**2 + hori_ellip_term**2) <= 1
+    # thick_image[~mask] = np.nan
 
-    # distances = np.sqrt(vert_ellip_term**2 + hori_ellip_term**2)
-
-    mask = (vert_ellip_term**2 + hori_ellip_term**2) <= 1
-    inference_img[~mask] = np.nan
-
-    return inference_img
+    return thicknesses
 
 
 def rbf_interpolation(x: np.ndarray, y: np.ndarray, values, img_size: Point):
@@ -120,10 +163,10 @@ def rbf_interpolation(x: np.ndarray, y: np.ndarray, values, img_size: Point):
     sparse_groundtruth = np.zeros(img_size)
     sparse_groundtruth[sparse_groundtruth == 0] = np.nan
     for i, j, z in zip(y_scaled, x_scaled, values):
-        logger.debug(f"Inserting fpoint ({i},{j})")
+        # logger.debug(f"Inserting fpoint ({i},{j})")
         ii = min(int(i), img_size.y - 1)
         ij = min(int(j), img_size.x - 1)
-        logger.debug(f"Inserting ipoint ({ii},{ij})")
+        # logger.debug(f"Inserting ipoint ({ii},{ij})")
         sparse_groundtruth[ii, ij] = z
 
     return ZI, sparse_groundtruth
@@ -142,7 +185,12 @@ if __name__ == "__main__":
     logger = create_logger("MAIN")
 
     logger.info(f"Importing model {args.model_path}")
-    model = Model(args.image_channels, 1)
+
+    if args.kernel_radius > 0:
+        model = SpatialModel(args.kernel_radius, args.image_channels, 1)
+    else:
+        model = Model(args.image_channels, 1)
+
     model.load_state_dict(torch.load(args.model_path))
     model.eval()
 
@@ -165,6 +213,7 @@ if __name__ == "__main__":
         args.image_width,
         args.image_height,
         args.desired_angle,
+        args.kernel_radius,
     )
 
     # For the sake of uniform vmap

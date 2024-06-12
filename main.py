@@ -63,6 +63,12 @@ def arguments():
         help="Where to store post-processed data.",
     )
     ap.add_argument(
+        "--lr_gamma",
+        default=0.1,
+        help="How much to decrease learnign rate by",
+        type=float,
+    )
+    ap.add_argument(
         "--model_path",
         default="./models",
         help="Where to store trained data",
@@ -72,6 +78,12 @@ def arguments():
         default=2,
         type=int,
         help="Radius of kernel used for spatial methods.",
+    )
+    ap.add_argument(
+        "--scheduler_step",
+        default=20,
+        type=int,
+        help="How often to decrease the learning gamma",
     )
 
     ap.add_argument(
@@ -97,13 +109,19 @@ def arguments():
 
     # Parmeters for training
     ap.add_argument("--epochs", default=30, type=int, help="Training Epochs")
-    ap.add_argument("--batch_size", default=32, help="Batch Size")
+    ap.add_argument("--batch_size", default=64, help="Batch Size")
     ap.add_argument("--random_seed", default=42, help="Seed for psudo-randomness")
     ap.add_argument(
         "--weight_decay",
-        default=0.01,
+        default=0.001,
         type=float,
         help="Weight Decay for L2 Regularization",
+    )
+    ap.add_argument(
+        "--learning_rate",
+        default=0.01,
+        type=float,
+        help="Learnign rate for the model",
     )
     ap.add_argument(
         "--train_val_split", default=[0.8, 0.2], help="Train, Test Split"  # Val later
@@ -139,11 +157,6 @@ def build_learning_ds(
             logger.warn("Could not find some of the corresponding coordinates")
 
     return ds
-
-
-def infill_missing_point(row: pd.Series):
-    # TODO: Fill in with the right type of content
-    pass
 
 
 def N_channels_to_one(image: np.ndarray) -> np.ndarray:
@@ -183,10 +196,15 @@ def load_cached_data(cache_path: str) -> List[List[Tuple]]:
     return simple_list
 
 
+def set_all_seeds(seed: int):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+
 if __name__ == "__main__":
     args = arguments()
     # Set random seeds
-    torch.manual_seed(args.random_seed)
+    set_all_seeds(args.random_seed)
 
     # Parquet format is a lot lighter than csv
     logger.info(f"Preprocesing data at {args.rawdata_path}")
@@ -222,11 +240,12 @@ if __name__ == "__main__":
     logger.info("Model Structure looks like:")
     logger.info(model)
     optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=0.001,  # weight_decay=args.weight_decay
+        model.parameters(), lr=args.learning_rate  # , weight_decay=args.weight_decay
     )
     criterium = torch.nn.MSELoss()
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
+    scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer, step_size=args.scheduler_step, gamma=args.lr_gamma
+    )
 
     # Build X -> Y Dataset
     # dataset = build_learning_ds(ds_a, ds_b, args.image_height, args.image_width)
