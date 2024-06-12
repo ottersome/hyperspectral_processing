@@ -76,11 +76,11 @@ def image_inference(
         features_parquet, template_loc, image_width, image_height, desired_angle
     )
 
-    finimg_height, finimg_width, finimg_chan = final_img.shape
+    finimg_height, finimg_width, _ = final_img.shape
     batch_size = 1024
 
     batch = []
-    thicknesses = np.zeros((finimg_height, finimg_width))
+    thicknesses = np.zeros(finimg_height * finimg_width)
     # We go through *all* the pixels here
     total_size = finimg_width * finimg_height
     bar = tqdm(total=(total_size), desc="Going through image")
@@ -91,10 +91,11 @@ def image_inference(
             )
             batch.append(hyper_kernel)
             # Get thickness out of model
-            gidx = i * image_width + j
+            gidx = i * finimg_width + j
             if gidx % batch_size == 0:
                 # logger.info(f"Batch is of type {type(batch)} and looks like {batch}")
                 batch_tensor = torch.tensor(np.stack(batch, axis=0)).to(torch.float32)
+                # CHECK:  That permutation is correct
                 batch_tensor = batch_tensor.permute(0, 3, 1, 2)
                 # Add a list to thicknesses
                 # thicknesses += batch_tensor.detach().numpy().tolist()
@@ -102,9 +103,6 @@ def image_inference(
                     model(batch_tensor).detach().numpy()
                 ).flatten()
 
-                bar.set_description(
-                    f"Have calculated {len(thicknesses)} thicknesses {thicknesses[gidx - batch_size : gidx]}"
-                )
                 batch.clear()
             bar.update(1)
             # TODO: add this back
@@ -121,6 +119,7 @@ def image_inference(
 
     # Once all thicknesses are gathered we reshape it into the image
     # thick_image = np.array(thicknesses).ravel().reshape(finimg_height, finimg_width, 1)
+    thicknesses = thicknesses.reshape(finimg_height, finimg_width)
 
     # Crate ellipse mask:
     # yslice, xslice = np.ogrid[:finimg_height, :finimg_width]
