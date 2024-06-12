@@ -1,9 +1,8 @@
 import enum
 import os
 from argparse import ArgumentParser
-from collections import namedtuple
 from math import pi, sqrt
-from typing import Any, List, Tuple, Union
+from typing import Any, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,7 +12,7 @@ from torch.autograd import set_detect_anomaly  # type: ignore
 from tqdm import tqdm
 
 from hyptraining.datap.data import preprocess_data
-from hyptraining.utils.utils import compare_picture, create_logger, unused
+from hyptraining.utils.utils import create_logger, unused
 
 
 # Create Enum for filetype
@@ -25,12 +24,6 @@ class FileType(enum.Enum):
 
 STR_TO_FILE = {k.value: k for k in FileType}
 
-from image_processing import (
-    Point,
-    chords_to_circle,
-    find_distinctive_feature_coords,
-    get_final_image,
-)
 from model import Model, SpatialModel
 
 set_detect_anomaly(True)
@@ -134,7 +127,6 @@ def arguments():
 def build_learning_ds(
     ds_thickness: pd.DataFrame,
     ds_hyper: pd.DataFrame,
-    hyp_img_height: int,
     hyp_img_width: int,
 ) -> List[List[Any]]:
     ds = []
@@ -143,7 +135,7 @@ def build_learning_ds(
     of List[band0,band1,...,band121, thickness] in order to better suit learning algorithm
     """
 
-    for row_idx, row in ds_thickness.iterrows():
+    for _, row in ds_thickness.iterrows():
         # x, y = thickness_to_hyper_coords(
         #     row["X"], row["Y"], hyp_img_height, hyp_img_width
         # )
@@ -248,7 +240,7 @@ if __name__ == "__main__":
     )
 
     # Build X -> Y Dataset
-    # dataset = build_learning_ds(ds_a, ds_b, args.image_height, args.image_width)
+    # dataset = build_learning_ds(ds_a, ds_b, args.image_width)
     # Create Train-Validation split
 
     ds_train = dataset[: int(len(dataset) * args.train_val_split[0])]

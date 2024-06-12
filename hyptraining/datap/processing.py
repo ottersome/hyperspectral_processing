@@ -1,7 +1,6 @@
 import os
-from collections import namedtuple
 from dataclasses import dataclass
-from typing import Any, List, Tuple, Union
+from typing import List, Tuple, Union
 
 import cv2
 import numpy as np
@@ -22,13 +21,14 @@ ORIENTATIONS_RAD = [np.pi / 2, np.pi, 3 * np.pi / 2, 0]
 logger = create_logger(os.path.basename(__file__))
 
 
-def get_screen_resolution():
+def get_screen_resolution() -> Point:
     for m in get_monitors():
         return Point(m.width, m.height)
+    raise ValueError("No monitors found")
 
 
 def resize_image_to_screen(img: np.ndarray) -> Tuple[np.ndarray, float]:
-    scrnw, scrnh = get_screen_resolution()
+    scrnw, scrnh = get_screen_resolution()  # type : ignore
     imgh, imgw = img.shape[:2]
     scaling_factor = min(scrnw / imgw, scrnh / imgh)
     new_width, new_height = (int(imgw * scaling_factor), int(imgh * scaling_factor))
@@ -83,7 +83,7 @@ def chords_to_circle(img: np.ndarray) -> Tuple[Point, int]:
 
     cv2.namedWindow("image")
     # Set Size of window
-    cv2.resizeWindow("image")
+    # cv2.resizeWindow("image")
     cv2.setMouseCallback("image", on_mouse)
     print(f"Image {img}")
     cv2.imshow("image", img)
@@ -112,9 +112,6 @@ def find_distinctive_feature_coords(
     print(f"Image size is {img_gray.shape[0]} ,{img_gray.shape[1]}")
     print(f"Feature size is {feature_gray.shape[0]} ,{feature_gray.shape[1]}")
     feat_width, feat_height = feature_gray.shape[0], feature_gray.shape[1]
-
-    cur_maxval = 0
-    cur_loc = [-1, -1]
 
     print(f"Image we will use is of shape {img_gray.shape}")
     max_vals = []
@@ -287,8 +284,8 @@ def store_all_channels(img: np.ndarray):
     for c in range(img.shape[2]):
         # Save the cth channel into
         specific_place = Path(place) / f"channel_{c:3d}.png"
-        normalized = cv2.normalize(
-            img[:, :, c], None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+        normalized = cv2.normalize(  # type:ignore
+            img[:, :, c], None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U  # type:ignore
         )
         cv2.imwrite(str(specific_place), normalized)
 
@@ -330,7 +327,6 @@ def thickess_to_img_space(df: pd.DataFrame, image_size: int) -> np.ndarray:
     # Get actual Points
     for i, (x, y, t) in df.iterrows():
         # j, i = thickness_to_hyper_coords(x, y)
-        logger.debug(f"Inspection (x,y) = ({x},{y})")
         i, j = (int(y + radius), int(x + radius))
         img[i, j, 1] = t
     # Normalize thickness
@@ -351,18 +347,17 @@ def get_standard_source(
     img = hypdataframe_to_tensor(src, src_width, src_height)
 
     final_img = np.ndarray([])
-    ignore_spot = Circle(Point(0, 0), 0.0)
+    ignore_spot = Circle(Point(0, 0), 0)
 
     satisfied = False
     while not satisfied:
 
-        cropped_n_rotated_img = get_circle_ofinterest(
-            img, template_img, src_width, src_height, feature_angle
-        )
+        cropped_n_rotated_img = get_circle_ofinterest(img, template_img, feature_angle)
 
-        visual_img = np.stack((cropped_n_rotated_img[:, :, 60],) * 3, axis=-1)
+        visual_img = cropped_n_rotated_img[:, :, 60].copy()[:, :, np.newaxis]
+        visual_img = np.repeat(visual_img, 3, axis=2)
         visual_img = cv2.normalize(
-            visual_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+            visual_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U  # type: ignore
         )
         print("Please select area to remove (ignore)")
         cv2.imshow("image", visual_img)
@@ -398,8 +393,6 @@ def get_standard_source(
 def get_circle_ofinterest(
     img: np.ndarray,
     template_img: np.ndarray,
-    src_width: int,
-    src_height: int,
     feature_angle: float,  # Should be radians
 ) -> np.ndarray:
     """
@@ -410,14 +403,14 @@ def get_circle_ofinterest(
     while not satisfied:
         gray_img = img[:, :, 60].squeeze() if img.shape[2] > 1 else img  # READ ONLY
 
-        visual_rep = np.stack((gray_img,) * 3, axis=-1).astype(
+        visual_rep = np.repeat(gray_img[:, :, np.newaxis], 3, axis=2).astype(
             np.float32
         )  # Visual changes happen here'
         # Show Image for changes
         cv2.namedWindow("image")
         visual_rep, scaling_factor = resize_image_to_screen(visual_rep)
-        visual_rep = cv2.normalize(
-            visual_rep, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+        visual_rep = cv2.normalize(  # type: ignore
+            visual_rep, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U  # type: ignore
         )
         # Ask user to select circle within the image
         cv2.imshow("image", visual_rep)
@@ -458,10 +451,11 @@ def get_circle_ofinterest(
             img, circle_of_interest_coords_true, circle_of_interest_radius_true
         )
         # For later visualization
-        cropped_visual = np.stack((cropped_img_true[:, :, 60].copy(),) * 3, axis=-1)
+        cropped_visual = cropped_img_true[:, :, 60].copy()[:, :, np.newaxis]
+        cropped_visual = np.repeat(cropped_visual, 3, axis=2)
         cropped_visual = cv2.normalize(  # type: ignore
             cropped_visual,
-            None,
+            None,  # type:ignore
             0,
             255,
             cv2.NORM_MINMAX,
@@ -479,10 +473,11 @@ def get_circle_ofinterest(
         rotated_img = rotate_according_to_feature(
             cropped_img_true, feature_of_interest, feature_angle
         )
-        visual_rotdimg = np.stack((rotated_img[:, :, 60].copy(),) * 3, axis=-1)
+        visual_rotdimg = rotated_img[:, :, 60].copy()[:, :, np.newaxis]
+        visual_rotdimg = np.repeat(visual_rotdimg, 3, axis=2)
         visual_rotdimg = cv2.normalize(  # type: ignore
             visual_rotdimg,
-            None,
+            None,  # type: ignore
             0,
             255,
             cv2.NORM_MINMAX,
@@ -522,10 +517,11 @@ def get_circle_ofinterest(
             decision = int(decision)
             print(f"Rotating {90*decision} degrees...")
             rotated_img = fix_rotation(decision, cropped_img_true)
-            visual_rotdimg = np.stack((rotated_img[:, :, 60].copy(),) * 3, axis=-1)
+            visual_rotdimg = rotated_img[:, :, 60].copy()[:, :, np.newaxis]
+            visual_rotdimg = np.repeat(visual_rotdimg, 3, axis=2)
             visual_rotdimg = cv2.normalize(  # type: ignore
                 visual_rotdimg,
-                None,
+                None,  # type:ignore
                 0,
                 255,
                 cv2.NORM_MINMAX,

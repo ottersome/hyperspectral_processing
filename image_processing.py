@@ -1,9 +1,8 @@
 """
 This is a file used for experimetns. Not really used for much but for education
 """
+
 import argparse
-import tkinter as tk
-from collections import namedtuple
 from typing import Tuple
 
 import cv2

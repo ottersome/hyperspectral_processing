@@ -4,6 +4,7 @@ All data is generated at random
 For sources see:
 - https://courses.physics.ucsd.edu/2011/Summer/session1/physics1c/lecture10.pdf
 """
+
 import math
 import os
 from argparse import ArgumentParser
@@ -110,8 +111,10 @@ def imagecoords_to_thickcoords(
     """
     # Create scale matrix(img to thick coordinates)
     translate_vector = np.array([-img_aoi_center.y, -img_aoi_center.x])
-    pointst = points + np.stack([translate_vector] * points.shape[0], axis=0)
-    pointst = np.multiply(pointst, np.stack(([-1, 1],) * points.shape[0], axis=0))
+    pointst = points + np.repeat(translate_vector, points.shape[0], axis=0)
+    pointst = np.multiply(
+        pointst, np.repeat(np.array([-1, 1]), points.shape[0], axis=0)
+    )
     scale_matrix = np.array(
         [[thick_radius / img_aoi_radius, 0], [0, thick_radius / img_aoi_radius]]
     )

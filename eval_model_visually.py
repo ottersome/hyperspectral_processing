@@ -10,7 +10,7 @@ from scipy.interpolate import Rbf
 from torch import nn
 from tqdm import tqdm
 
-from hyptraining.datap.data import combine_srctarg_into_sample, get_roi_around_point
+from hyptraining.datap.data import get_roi_around_point
 from hyptraining.datap.processing import get_standard_source
 from hyptraining.utils.utils import Point, create_logger
 from model import Model, SpatialModel
@@ -163,10 +163,8 @@ def rbf_interpolation(x: np.ndarray, y: np.ndarray, values, img_size: Point):
     sparse_groundtruth = np.zeros(img_size)
     sparse_groundtruth[sparse_groundtruth == 0] = np.nan
     for i, j, z in zip(y_scaled, x_scaled, values):
-        # logger.debug(f"Inserting fpoint ({i},{j})")
         ii = min(int(i), img_size.y - 1)
         ij = min(int(j), img_size.x - 1)
-        # logger.debug(f"Inserting ipoint ({ii},{ij})")
         sparse_groundtruth[ii, ij] = z
 
     return ZI, sparse_groundtruth

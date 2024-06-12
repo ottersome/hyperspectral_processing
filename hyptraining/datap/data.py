@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import List, Union
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -44,7 +44,6 @@ def get_roi_around_point(
     assert len(image.shape) >= 2, "Image needs to be of at least 2d"
     # Get the the extremes
     poi = point_of_interest
-    # DATA_LOGGER.debug(f"Point of interest is \n{point_of_interest}")
 
     y_rawmin = poi.y - kernel_radius
     y_rawmax = poi.y + kernel_radius
@@ -65,8 +64,6 @@ def get_roi_around_point(
     offset_x_right = None if offset_x_right == 0 else offset_x_right
     offset_y_right = None if offset_y_right == 0 else offset_y_right
 
-    # DATA_LOGGER.debug(f"Offset y values  left: {offset_y_left} right: {offset_y_right}")
-    # DATA_LOGGER.debug(f"Offset x values  left: {offset_x_left} right: {offset_x_right}")
     # Ensure no blind spots are included
     yroi, xroi = np.meshgrid(
         np.arange(ymin, ymax + 1), np.arange(xmin, xmax + 1), indexing="ij"
@@ -76,19 +73,16 @@ def get_roi_around_point(
     fmask = mask.astype(float)
     fmask[~mask] = np.nan
     # OPTIM: Check if we can broadcast this
-    fmask = np.stack((fmask,) * image.shape[2], axis=2)
-    # DATA_LOGGER.debug(f"Long mask looks like \n{mask}")
+    fmask = np.repeat(fmask[:, :, np.newaxis], image.shape[2], axis=2)
 
     # Do the actual selection
     return_kernel = np.zeros(
         (kernel_radius * 2 + 1, kernel_radius * 2 + 1, image.shape[2])
     )
     unmasked_selection = image[ymin : ymax + 1, xmin : xmax + 1, :]
-    # DATA_LOGGER.debug(f"Unmasked selection : {unmasked_selection}")
     return_kernel[offset_y_left:offset_y_right, offset_x_left:offset_x_right, :] = (
         unmasked_selection * fmask
     )
-    # DATA_LOGGER.debug(f"The returned kernel looks like: {return_kernel.flatten()}")
 
     return return_kernel
 
@@ -157,7 +151,9 @@ def preprocess_data(
 
     # Replace the extension with npy (could be any in a range of extensions)
     num_columns = ((kernel_radius * 2 + 1) ** 2) * source_channels
-    columns = ["X", "Y", "I", "J", "Thickness"] + [f"C{i}" for i in range(num_columns)]
+    columns: List = ["X", "Y", "I", "J", "Thickness"] + [
+        f"C{i}" for i in range(num_columns)
+    ]
 
     # Ensure it exists
     Path(cached_dir).mkdir(parents=True, exist_ok=True)
@@ -201,7 +197,7 @@ def preprocess_data(
                 standard_source, target_rows, ignore_spot, trgimg_size, kernel_radius
             )
 
-            pd.DataFrame(final_rows, columns=columns).to_parquet(
+            pd.DataFrame(final_rows, columns=columns).to_parquet(  # type:ignore
                 saveto_path, index=False
             )
 
@@ -246,7 +242,7 @@ def _read_target(file_path: str) -> pd.DataFrame:
     return frame
 
 
-def read_csv(csv_path: str, file_t):
+def read_csv(csv_path: str, _):
     # Will assume a fixed data format
     if "source" in csv_path:
         pass

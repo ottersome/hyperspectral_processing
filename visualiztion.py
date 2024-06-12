@@ -35,8 +35,8 @@ def get_arguments():
 def get_img_of_interest(img: np.ndarray) -> Tuple[np.ndarray, Circle]:
 
     gray_img = img[:, :, 60].squeeze() if img.shape[2] > 1 else img  # READ ONLY
-    gray_img = np.mean(img, axis=-1)
-    visual_rep = np.stack((gray_img,) * 3, axis=-1).astype(
+    gray_img = np.mean(img, axis=-1).flatten()
+    visual_rep = np.repeat(gray_img[:, :, np.newaxis], 3, axis=2).astype(
         np.float32
     )  # Visual changes happen here'
     # Ask user to select within the imagek
