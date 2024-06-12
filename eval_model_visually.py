@@ -3,6 +3,7 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 import pandas as pd
 import torch
 from numpy import pi
@@ -52,6 +53,12 @@ def get_args():
         "--template_location",
         default="./feature_right.png",
         help="Template for detecting features",
+    )
+    ap.add_argument(
+        "--dontsave_table",
+        action="store_false",
+        help="Whether or not to output a table of the  image",
+        default=True,
     )
 
     return ap.parse_args()
@@ -235,6 +242,17 @@ if __name__ == "__main__":
 
     im1 = axs[2].imshow(predicted_image, vmin=gmin, vmax=gmax)
     axs[2].set_title("ML-Inferred Values")
+
+    # Save predicted_image as a parque table
+    if args.save_table:
+        os.makedirs("output/images/", exist_ok=True)
+        # No colums or rows, just an image
+        pd.DataFrame(
+            predicted_image, columns=[f"p{i}" for i in range(predicted_image.shape[1])]
+        ).to_parquet(
+            "output/images/predicted_image.parquet",
+            index=False,
+        )
 
     # dump_to_log(predicted_image, "predicted_image", "predicted_image.log")
     fig.colorbar(im0, ax=axs, orientation="vertical", label="Thickness", shrink=0.5)
